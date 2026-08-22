@@ -42,19 +42,35 @@ RUN_TIMEOUT_SECONDS = 180
 failures = 0
 
 
-def call(method: str, path: str, body: object | None = None) -> tuple[int, object]:
-    """One request, retried on a dropped connection.
+def call(
+    method: str,
+    path: str,
+    body: object | None = None,
+    *,
+    retry_safe: bool | None = None,
+) -> tuple[int, object]:
+    """One request, retried on a dropped connection — but only where that is safe.
 
     The polling loops below open a fresh connection every second, and Windows
     will occasionally reset one under that load. That is a property of the
     harness, not of the API, and it once killed a run in which every check had
     passed — so a transport-level failure is retried rather than reported as a
     gate failure. An HTTP error is never retried: that is an answer.
+
+    **Retrying is opt-in for anything that is not a GET.** A retry after a lost
+    response cannot tell "the request never arrived" from "the reply never came
+    back", so retrying a POST that is not idempotent creates a second of
+    whatever it makes. Starting a run is idempotent on its content address, so
+    that one opts in explicitly; creating a project is not, so it does not.
     """
+    if retry_safe is None:
+        retry_safe = method == "GET"
+    attempts = 3 if retry_safe else 1
+
     data = json.dumps(body).encode() if body is not None else None
     last: OSError | None = None
 
-    for attempt in range(3):
+    for attempt in range(attempts):
         request = urllib.request.Request(
             f"{BASE}{path}",
             data=data,
@@ -70,7 +86,7 @@ def call(method: str, path: str, body: object | None = None) -> tuple[int, objec
             last = error
             time.sleep(1 + attempt)
 
-    raise SystemExit(f"{method} {path} failed after 3 attempts: {last}")
+    raise SystemExit(f"{method} {path} failed after {attempts} attempt(s): {last}")
 
 
 def fetch_html(url: str) -> str:
@@ -418,6 +434,36 @@ def main() -> int:
     _, done = call("GET", f"/runs/{third['id']}")
     status, _ = call("POST", f"/runs/{done['id']}/cancel")
     step("a terminal run cannot be cancelled twice", status == 400)
+
+    section("Phase 4: starting a run is idempotent")
+    # The failure this prevents: a client retries after a lost response and
+    # starts the same work twice. The duplicate is indistinguishable from a
+    # deliberate re-run, and it is how a queue fills with duplicate jobs
+    # overnight. `call` retries transport failures, so this endpoint has to be
+    # safe under exactly that.
+    _, before_runs = call("GET", f"/targets/{target_id}/runs")
+    identical = {"max_variants": 31}
+
+    status_a, first = call("POST", f"/goals/{goal['id']}/runs", identical, retry_safe=True)
+    step("a run starts", status_a == 201, f"run {first['id'][:8]}")
+
+    status_b, again = call("POST", f"/goals/{goal['id']}/runs", identical, retry_safe=True)
+    step("an identical request returns the same run, not a second one",
+         again["id"] == first["id"], f"{again['id'][:8]} == {first['id'][:8]}")
+    step("and says so with 200 rather than 201", status_b == 200, f"status {status_b}")
+
+    _, after_runs = call("GET", f"/targets/{target_id}/runs")
+    step("exactly one run was created by the two requests",
+         len(after_runs) == len(before_runs) + 1,
+         f"{len(before_runs)} -> {len(after_runs)}")
+    step("both requests share one content address",
+         again["input_hash"] == first["input_hash"])
+
+    # A different parameter is a different run, or deduplication would be
+    # swallowing work the user asked for.
+    status_c, different = call("POST", f"/goals/{goal['id']}/runs", {"max_variants": 32})
+    step("a different parameter still starts a new run",
+         status_c == 201 and different["id"] != first["id"])
 
     # ----------------------------------------------------------------- Phase 5
 

@@ -445,6 +445,28 @@ the normalisation table as well. Both fixtures are committed and the suite stays
 hermetic; the DSSP files are real output from the PDB-REDO DSSP databank, and a test
 asserts they were computed on the same coordinates this repository feeds to biotite.
 
+#### Adding a reference fixture — required steps
+
+Fixtures are **pinned in the repository and never re-fetched at test time.** A test that
+downloads its own reference can fail because a server changed, and — worse — can silently
+start validating against different coordinates.
+
+Any new reference fixture must:
+
+1. commit both files, the coordinates and the reference output, side by side;
+2. record provenance in `tests/fixtures/README.md`: the URL, the date, and the tool
+   version that produced the reference;
+3. **assert the reference was computed on the committed coordinates.** DSSP prints CA
+   positions, so the check is a coordinate comparison; another tool needs whatever
+   equivalent it offers. `test_the_dssp_fixture_was_computed_on_the_vendored_coordinates`
+   is the existing example.
+
+Step 3 is not optional and is not satisfied by "they came from the same PDB id". The
+current fixtures agree to 0.0 and 0.1 Å because the DSSP databank computed them from the
+deposited entries — but a re-refined structure (PDB-REDO's own output, a newer deposition)
+would not, and the difference would show up as an unexplained tolerance failure long after
+whoever added the fixture had moved on.
+
 ### Every parameter is stated
 
 - **Normalisation**: `domain/constants/max_asa` — Tien et al. 2013, theoretical column,
@@ -518,3 +540,87 @@ em dashes, and the dash means something specific: unavailable, here is why.
 dynamically imported and browser-only. Coordinates are served by our own API
 (`GET /targets/{id}/structure`) so the content hash recorded at attach time is verified on
 the way through and the viewer cannot render a file that changed underneath the target.
+
+### Decision: mutant side chains are not modelled
+
+Specification §5.6 asks for a wild-type/mutant rotamer toggle. There is no toggle, and
+this is a decision rather than an omission.
+
+Placing a mutant side chain requires a side-chain packer, which is not in this stack. A
+toggle that redrew the wild-type residue under a "mutant" label would be fabricating
+structural data — the one thing this product must not do — and it would be the most
+convincing fabrication in the build, because a rendered side chain looks like a
+measurement. The inspector states the limitation instead.
+
+**The path forward, when a packer enters the stack:** place the most probable rotamer
+from a backbone-dependent rotamer library (Dunbrack), label it as the most probable
+rotamer rather than as a prediction, and **do not energy-minimise it**. Minimising would
+produce a pose that looks like a computed structure and is not one; the library
+probability is a citable statement about backbone-conditioned side-chain preference, and
+that is exactly as much as should be claimed. Not Phase 6 scope. It is the first thing to
+revisit when a packer lands.
+
+---
+
+## 13. No validation claim rests on a rank statistic alone
+
+A standing rule, and the most general thing this build has learned.
+
+It came out of the solvent-accessibility work. Agreement with published DSSP output
+was supposed to validate the van der Waals radii set; it cannot, because **a
+correlation statistic is invariant to the transform that produces the error it is
+meant to catch**. Swapping ProtOr for a uniform radius on TEM-1 moved 8 residues
+across a region boundary and *raised* correlation with DSSP to r = 0.998. The test
+passed more convincingly while the answer got worse.
+
+Correlation and rank statistics are invariant to monotonic transforms. A systematic
+offset, a scale error and a miscalibration are all monotonic. So a rank statistic is
+structurally incapable of detecting the errors most likely to be present.
+
+**The rule.** Any claim that a number is *right* — not merely ordered — must be
+supported by a statistic sensitive to absolute value. In practice: a rank or
+correlation measure may appear beside an error measure and a bias measure, never
+alone, and never as the headline.
+
+This has three consequences already written into the build, and it applies to
+anything added later.
+
+### Solvent accessibility (Phase 5, shipped)
+
+Two tests, because one could not do the job: agreement with published DSSP for the
+absolute values, plus a golden per-residue table pinning the radii set and the
+normalisation table. §11 has the numbers.
+
+### Predictor agreement (Phase 6)
+
+The column is labelled **agreement** and never *confidence*, and its tooltip says
+why in as many words: two models agreeing is not evidence that either is right.
+Predictors trained on overlapping data share their biases, so agreement measures
+how alike two models are, not how close either is to the truth. Where they disagree
+is informative; where they agree, nothing has been established.
+
+`MetricSpec` carries the sign convention for exactly this reason — the label lives
+with the provider, so a second screen cannot quietly rename it.
+
+### The scorecard (Phase 8)
+
+The serious case, because the scorecard is the moat and its whole job is telling a
+lab which predictor to trust.
+
+Spearman ρ and precision@k are both rank statistics. **A predictor offset by a
+constant +2 kcal/mol scores ρ = 1.00 and precision@10 = 1.0 while being useless for
+the decision the user is actually making**, which is absolute: will this variant
+hold at 65 °C.
+
+Every predictor scorecard therefore reports, together and in one view:
+
+| Kind      | Statistic                        | Answers                                |
+| --------- | -------------------------------- | -------------------------------------- |
+| Rank      | Spearman ρ, precision@k          | Does it put the right variants on top? |
+| **Error** | **MAE, kcal/mol**                | **How far off is it?**                 |
+| **Bias**  | **Mean signed error, kcal/mol**  | **Is it off in one direction?**        |
+
+The bias term is rendered **visually adjacent to the rank term**, not in a detail
+panel or behind a tab. A predictor that ranks perfectly and sits 2 kcal/mol high
+must show both facts in one glance, or the scorecard has failed at the only job it
+has. A headline that is a rank statistic alone is a defect, not a simplification.

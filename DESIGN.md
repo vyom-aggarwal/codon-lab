@@ -244,8 +244,10 @@ Tables, not cards, for anything list-shaped. Every table has:
 
 ## 4. Global interaction
 
-`⌘K` command palette (jump to project, add a constraint, start a run, open a variant by
-typing `A123V`). `?` opens the shortcut sheet. `Esc` closes the topmost layer.
+`Esc` closes the topmost layer. Every table carries the keyboard path in §3.
+
+`⌘K` and `?` are **deferred — see §9.** They are specified, not built, and this section
+describes what exists.
 
 Focus rings are visible on **every** interactive element: 2px accent at 2px offset.
 
@@ -291,3 +293,24 @@ codebase.** That is checked mechanically, not by eye —
 `apps/web/test/tokens.test.ts` fails the build on any hex literal, `rgb()`/`hsl()` call,
 or `text-[…px]` arbitrary value found in `app/` or `components/`, with an allowlist
 covering only `tokens.css` itself and data-visualisation scales.
+
+---
+
+## 9. Deferred
+
+Specified in `BRIEF.md`, not yet built. Listed here because a design document that
+describes what does not exist is worse than one that admits the gap: it stops being
+checkable, and the next reader cannot tell which parts are the contract and which are
+the wish.
+
+Nothing may be added to this section without a phase named beside it.
+
+| Device                          | Specified in   | Lands in | Why not yet                                                                                                                              |
+| ------------------------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `⌘K` command palette            | `BRIEF.md` §4  | Phase 9  | Needs a search surface over projects, targets, constraints and variants — most of which arrived only in Phases 4 and 5. Built with the a11y pass, where keyboard traversal is the phase's subject. |
+| `?` shortcut sheet              | `BRIEF.md` §4  | Phase 9  | It documents the shortcuts, so it follows them. The workbench path (`j`/`k`/`x`/`Enter`/`Esc`) exists and is tested; the sheet listing it does not.                                                |
+| Wild-type / mutant rotamer toggle | `BRIEF.md` §5.6 | Unscheduled | Needs a side-chain packer. Redrawing the wild-type residue under a "mutant" label would fabricate structural data. See `ARCHITECTURE.md` §12 for the decision and the Dunbrack path forward.       |
+| Dark mode toggle                | `BRIEF.md` §4  | Unscheduled | Tokens are defined in §1.2 and ship; the toggle does not. Per the brief, it lands only if a phase comes in early.                          |
+
+**Row-height compaction (`26px`) is not deferred** — it is built, in the workbench
+filter rail.

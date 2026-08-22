@@ -124,15 +124,19 @@ def test_absolute_asa_agrees_with_published_dssp(pdb_id: str) -> None:
     assert abs(ratio - 1.0) <= MAX_TOTAL_RATIO_ERROR, f"total ratio={ratio:.3f}"
 
 
-def test_the_dssp_fixture_was_computed_on_the_vendored_coordinates() -> None:
+@pytest.mark.parametrize("pdb_id", ["1crn", "1btl"])
+def test_the_dssp_fixture_was_computed_on_the_vendored_coordinates(pdb_id: str) -> None:
     """Otherwise the comparison above compares against a different molecule.
 
     DSSP prints CA coordinates to one decimal; they must match the PDB file this
-    repository actually feeds to the SASA calculation.
+    repository actually feeds to the SASA calculation. This is step 3 of the
+    fixture procedure in ARCHITECTURE.md §11, and it is the step that catches a
+    reference computed on a re-refined structure — which would otherwise surface
+    much later as an unexplained tolerance failure.
     """
     dssp_ca: dict[str, tuple[float, float, float]] = {}
     started = False
-    for line in (FIXTURES / "1btl.dssp").read_text().splitlines():
+    for line in (FIXTURES / f"{pdb_id}.dssp").read_text().splitlines():
         if line.startswith("  #  RESIDUE"):
             started = True
             continue
@@ -145,7 +149,7 @@ def test_the_dssp_fixture_was_computed_on_the_vendored_coordinates() -> None:
         )
 
     checked = 0
-    for line in (FIXTURES / "1btl.pdb").read_text().splitlines():
+    for line in (FIXTURES / f"{pdb_id}.pdb").read_text().splitlines():
         if line.startswith("ATOM") and line[12:16].strip() == "CA" and line[16] in " A":
             label = line[22:27].strip()
             if label not in dssp_ca:
@@ -155,10 +159,29 @@ def test_the_dssp_fixture_was_computed_on_the_vendored_coordinates() -> None:
                 # DSSP prints one decimal, so half an ulp is 0.05 exactly and a
                 # coordinate ending .x5 lands on the boundary. 0.06 is that plus
                 # float noise — anything larger would be a different molecule.
+                # Do not widen this to make a new fixture pass.
                 assert abs(mine - theirs) <= 0.06, f"{label}: {here} vs {dssp_ca[label]}"
             checked += 1
 
     assert checked == len(dssp_ca) > 0
+
+
+def test_every_dssp_fixture_has_a_coordinate_file_beside_it() -> None:
+    """A reference with no coordinates cannot be checked, so it must not exist."""
+    for dssp in FIXTURES.glob("*.dssp"):
+        assert dssp.with_suffix(".pdb").exists(), (
+            f"{dssp.name} has no coordinates committed beside it — see "
+            "ARCHITECTURE.md §11, step 3."
+        )
+
+
+def test_the_fixture_provenance_is_recorded() -> None:
+    """Every fixture is listed in the README with its source and date."""
+    readme = (FIXTURES / "README.md").read_text()
+    for fixture in FIXTURES.iterdir():
+        if fixture.name == "README.md":
+            continue
+        assert fixture.name in readme, f"{fixture.name} is not recorded in fixtures/README.md"
 
 
 # --------------------------------------------------------------------------- #

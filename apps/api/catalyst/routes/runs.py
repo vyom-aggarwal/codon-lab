@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session
 
@@ -173,15 +173,23 @@ def _run_out(session: Session, run: Run) -> RunOut:
 
 
 @router.post("/goals/{goal_id}/runs", response_model=RunOut, status_code=201)
-def start_run(goal_id: uuid.UUID, body: StartRunIn, session: SessionDep) -> RunOut:
+def start_run(
+    goal_id: uuid.UUID, body: StartRunIn, session: SessionDep, response: Response
+) -> RunOut:
     """Start a design run from a confirmed objective.
 
     The service calls `goals.require_confirmed` before anything else. This
     endpoint does not repeat that check: a check duplicated on the way in is a
     check that can disagree with the one that matters.
+
+    **Idempotent on the run's content address.** An identical request returns the
+    run that already exists, with `200` rather than `201`, so a client that
+    retries a lost response — or a user who double-clicks — does not start the
+    same work twice. The distinction is in the status code because that is the
+    one place a caller can read it without comparing ids.
     """
     try:
-        run = service.create(
+        run, created = service.create(
             session,
             goal_id=goal_id,
             dispatch=queue.enqueue_run,
@@ -189,6 +197,8 @@ def start_run(goal_id: uuid.UUID, body: StartRunIn, session: SessionDep) -> RunO
         )
     except ServiceError as error:
         raise _fail(error) from error
+    if not created:
+        response.status_code = 200
     return _run_out(session, run)
 
 
@@ -216,10 +226,12 @@ def cancel_run(run_id: uuid.UUID, session: SessionDep) -> RunOut:
 
 
 @router.post("/runs/{run_id}/rerun", response_model=RunOut, status_code=201)
-def rerun(run_id: uuid.UUID, body: StartRunIn, session: SessionDep) -> RunOut:
+def rerun(
+    run_id: uuid.UUID, body: StartRunIn, session: SessionDep, response: Response
+) -> RunOut:
     """Re-run with one parameter changed, linked to this run for the diff."""
     try:
-        run = service.rerun(
+        run, created = service.rerun(
             session,
             run_id=run_id,
             dispatch=queue.enqueue_run,
@@ -227,6 +239,8 @@ def rerun(run_id: uuid.UUID, body: StartRunIn, session: SessionDep) -> RunOut:
         )
     except ServiceError as error:
         raise _fail(error) from error
+    if not created:
+        response.status_code = 200
     return _run_out(session, run)
 
 

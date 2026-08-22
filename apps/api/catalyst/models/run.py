@@ -43,6 +43,16 @@ class ModelVersion(TimestampedModel, table=True):
 
 
 class Run(TimestampedModel, table=True):
+    """A design run.
+
+    A partial unique index on (goal_id, input_hash), restricted to the statuses
+    that mean the work is happening or has happened, makes starting a run
+    idempotent on its content address. Declared in migration 0003 rather than
+    here because SQLModel cannot express the `WHERE` clause, and the restriction
+    is the point: a failed run leaves the index so a retry after a genuine
+    failure starts fresh.
+    """
+
     project_id: uuid.UUID = Field(foreign_key="project.id", index=True, nullable=False)
     target_id: uuid.UUID = Field(foreign_key="target.id", index=True, nullable=False)
     goal_id: uuid.UUID = Field(foreign_key="goal.id", index=True, nullable=False)

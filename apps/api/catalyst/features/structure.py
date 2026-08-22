@@ -46,6 +46,11 @@ from biotite.structure.io.pdb import PDBFile
 from catalyst.domain.aminoacid import three_to_one
 from catalyst.domain.constants.max_asa import CITATION, CITATION_DOI, REFERENCE_SET, max_asa
 from catalyst.domain.regions import RegionCutoffs
+from catalyst.domain.schemes import (
+    SchemeResolutionError,
+    author_label_at,
+    positions_by_label,
+)
 from catalyst.models.enums import Region
 
 #: Recorded in every manifest: which implementation produced the numbers.
@@ -258,14 +263,16 @@ def compute(
             f"Chains present: {', '.join(chains)}.",
         )
 
-    label_to_position = {
-        label: index + 1 for index, label in enumerate(author_labels) if label is not None
-    }
+    # Refuses a scheme that labels two residues the same way, rather than
+    # silently keeping the last — see domain/schemes.
+    try:
+        label_to_position = positions_by_label(author_labels)
+    except SchemeResolutionError as error:
+        raise StructureFeatureError(str(error), error.remedy) from error
+
     active_keys: set[tuple[str, str]] = set()
     for position in active_site_positions:
-        if not 1 <= position <= len(author_labels):
-            continue
-        label = author_labels[position - 1]
+        label = author_label_at(author_labels, position)
         if label is not None:
             active_keys.add((chain_id, label))
     distances = _active_site_distances(protein, active_keys)

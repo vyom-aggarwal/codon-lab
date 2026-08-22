@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from catalyst.domain import aggregate as ranking_math
@@ -173,6 +174,26 @@ def _resolve_configured(config: Mapping[str, Any]) -> list[Predictor]:
 # --------------------------------------------------------------------------- #
 
 
+#: A run in one of these states is doing, or has done, the work. A failed or
+#: cancelled run is not — retrying after a genuine failure must start fresh.
+ACTIVE_RUN_STATUSES = (RunStatus.PENDING, RunStatus.RUNNING, RunStatus.SUCCEEDED)
+
+
+def _active_run_with(
+    session: Session, *, goal_id: uuid.UUID, input_hash: str
+) -> Run | None:
+    """An existing run for this goal with byte-identical inputs, if there is one."""
+    return session.exec(
+        select(Run)
+        .where(
+            col(Run.goal_id) == goal_id,
+            col(Run.input_hash) == input_hash,
+            col(Run.status).in_(ACTIVE_RUN_STATUSES),
+        )
+        .order_by(col(Run.created_at))
+    ).first()
+
+
 def _record(
     session: Session,
     *,
@@ -231,8 +252,25 @@ def create(
     config_patch: Mapping[str, Any] | None = None,
     parent_run_id: uuid.UUID | None = None,
     actor: str | None = None,
-) -> Run:
-    """Build a run from a confirmed objective and hand it to the queue."""
+) -> tuple[Run, bool]:
+    """Build a run from a confirmed objective and hand it to the queue.
+
+    Returns the run and whether it was created now. **Starting a run is
+    idempotent on its content address**: an identical request returns the run
+    that already exists rather than a second one.
+
+    That is not a nicety. `POST` is not idempotent by default, so a client that
+    retries after a lost response — a dropped connection, a proxy timeout, a
+    double-clicked button — would otherwise start the same work twice, and the
+    duplicate would be indistinguishable from a deliberate re-run. The run's
+    `input_hash` already covers everything that decides the result: the target,
+    the sequence, the structure, the goal, the config, the constraints, the
+    cutoffs and the model versions. If all of that matches an active run, the
+    request *is* that run.
+
+    Failed and cancelled runs are excluded, so a retry after a genuine failure
+    starts fresh rather than returning the corpse.
+    """
     # The Phase 3 gate. This is the second caller it was written for.
     goal = goal_service.require_confirmed(session, goal_id)
     target = require_target(session, goal.target_id)
@@ -271,6 +309,40 @@ def create(
     reference, _ = _structure_ref(session, target)
     constrained = constraint_service.constrained_positions(session, target.id)
 
+    # Everything that decides the result of this run, as one address. It is what
+    # the cache keys on, and — because it is complete — what makes starting a run
+    # idempotent.
+    input_hash = content_hash(
+        {
+            "target": str(target.id),
+            "sequence": digest_of(target.sequence),
+            "scheme": scheme.label,
+            "structure": None if reference is None else reference.content_hash,
+            "goal": goal.parsed_spec,
+            "config": config,
+            "constraints": {str(k): sorted(v) for k, v in constrained.items()},
+            # The burial cutoffs change what the region column says without
+            # changing a coordinate, so they are part of this run's content.
+            "rsa_cutoffs": project_service.cutoffs_for(
+                require_project(session, goal.project_id)
+            ).as_manifest(),
+            "models": [
+                {
+                    "id": predictor.id,
+                    "version": predictor.version,
+                    "weights_hash": predictor.weights_hash,
+                }
+                for predictor in predictors
+            ],
+        }
+    )
+
+    # Idempotency, checked before the write and enforced by a partial unique
+    # index underneath (migration 0003), so a concurrent pair cannot both insert.
+    existing = _active_run_with(session, goal_id=goal.id, input_hash=input_hash)
+    if existing is not None:
+        return existing, False
+
     run = Run(
         project_id=goal.project_id,
         target_id=target.id,
@@ -278,33 +350,19 @@ def create(
         status=RunStatus.PENDING,
         config=config,
         parent_run_id=parent_run_id,
-        input_hash=content_hash(
-            {
-                "target": str(target.id),
-                "sequence": digest_of(target.sequence),
-                "scheme": scheme.label,
-                "structure": None if reference is None else reference.content_hash,
-                "goal": goal.parsed_spec,
-                "config": config,
-                "constraints": {str(k): sorted(v) for k, v in constrained.items()},
-                # The burial cutoffs change what the region column says without
-                # changing a coordinate, so they are part of this run's content.
-                "rsa_cutoffs": project_service.cutoffs_for(
-                    require_project(session, goal.project_id)
-                ).as_manifest(),
-                "models": [
-                    {
-                        "id": predictor.id,
-                        "version": predictor.version,
-                        "weights_hash": predictor.weights_hash,
-                    }
-                    for predictor in predictors
-                ],
-            }
-        ),
+        input_hash=input_hash,
     )
     session.add(run)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError:
+        # Lost a race with a concurrent identical request. The other one won;
+        # this is that same request, so return its run rather than failing.
+        session.rollback()
+        raced = _active_run_with(session, goal_id=goal_id, input_hash=input_hash)
+        if raced is None:
+            raise
+        return raced, False
 
     for ordinal, planned in enumerate(plan(predictors)):
         model_version_id: uuid.UUID | None = None
@@ -360,7 +418,7 @@ def create(
         session.commit()
         session.refresh(run)
 
-    return run
+    return run, True
 
 
 def rerun(
@@ -370,7 +428,7 @@ def rerun(
     dispatch: Dispatch,
     config_patch: Mapping[str, Any] | None = None,
     actor: str | None = None,
-) -> Run:
+) -> tuple[Run, bool]:
     """Re-run with one parameter changed, linked to its predecessor.
 
     The child carries `parent_run_id`, which is what makes the diff exact rather

@@ -60,7 +60,7 @@ docker compose up -d
 python scripts/verify_gates.py
 ```
 
-105 checks asserting the Phase 2, 3, 4 and 5 exit gates end to end over HTTP.
+111 checks asserting the Phase 2, 3, 4 and 5 exit gates end to end over HTTP.
 It seeds its own projects and targets, so it is idempotent and safe to re-run.
 **Add a section to it for each phase you complete.** The Phase 4 section needs the
 `worker` container; it checks that first and says so if nothing is consuming the
@@ -70,8 +70,8 @@ now takes a few minutes and several UniProt/AlphaFold fetches.
 Per-package gates, all currently green:
 
 ```sh
-pnpm typecheck && pnpm lint && pnpm test           # 122 vitest
-cd apps/api && .venv/Scripts/python -m pytest -q   # 241 pytest
+pnpm typecheck && pnpm lint && pnpm test           # 127 vitest
+cd apps/api && .venv/Scripts/python -m pytest -q   # 259 pytest
 cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy catalyst
 ```
 
@@ -111,28 +111,34 @@ individual number, `ModelVersion.is_mock` in the database, and `is_demo` on the
 run and the ranking. Nothing outside `catalyst/providers/mock.py` invents a
 number. Do not describe any ranking this build produces as a prediction.
 
-**The 60fps half of the Phase 5 gate has NOT been measured, and cannot be from
-here.** The agent's browser pane runs hidden, so the page never composites and
-`requestAnimationFrame` never fires — which also means TanStack Virtual never
-recalculates, so a scroll cannot even be simulated. Verified directly:
-`rafFiredWithin500ms: false`, and the top row did not change after moving
-`scrollTop` to 150,000.
+**The Phase 5 performance gate was rewritten by the owner** (2026-08-16) from
+"10,000 rows scroll at 60fps" to **constant work per scroll update**, evidenced by
+a DOM node count that does not grow with row count and a scroll height matching
+rows x row height. That property is now asserted in CI —
+`apps/web/test/virtualisation.test.tsx` renders 100 rows and 10,000 rows and
+requires the same number of mounted `<tr>`, flat total DOM nodes, and a scroll
+height accounting for every row. Disabling virtualisation fails all five.
 
-What **was** measured, on a real 10,450-row ranking (firefly luciferase P08659,
-550 residues):
+Measured on a real 10,450-row ranking (firefly luciferase P08659, 550 residues):
 
-| Measurement                        | Value                              |
-| ---------------------------------- | ---------------------------------- |
-| Ranked rows served                 | 10,450                             |
-| `<tr>` in the DOM                  | 32                                 |
-| DOM nodes, whole page              | 772 (0.074 per ranked row)         |
-| Scroll height                      | 313,660px vs 10,450 × 30px expected |
-| Synchronous scroll + forced layout | 0.8ms                              |
+| Measurement                        | Value                               |
+| ---------------------------------- | ----------------------------------- |
+| Ranked rows served                 | 10,450                              |
+| `<tr>` in the DOM                  | 32                                  |
+| DOM nodes, whole page              | 772 (0.074 per ranked row)          |
+| Scroll height                      | 313,660px vs 10,450 x 30px expected |
+| Synchronous scroll + forced layout | 0.8ms                               |
 
-That establishes the property 60fps depends on — the work per frame is constant
-rather than proportional to the row count — but it is **not** a frame rate.
-**Someone with a visible browser must scroll it and watch.** Until then, do not
-claim the Phase 5 gate is fully met.
+**Frame rate is a manual check, and it has NOT been done.** It cannot be done from
+an agent session: the browser pane runs hidden, so nothing composites and
+`requestAnimationFrame` never fires — which also means the virtualiser never
+recalculates, so a scroll cannot even be simulated. Do not claim a frame rate in
+code comments, in docs, or in a commit message until the owner has run it.
+
+When it is run, record it here as user-verified with a date. The case the
+structural evidence does not cover, and the one to look at: **scrolling the table
+while Mol\* is mounted and holding a WebGL context.** That is the realistic worst
+case — the viewer is live in the inspector on every selected row.
 
 The gate's **other** half — "any score traces to a model version in two clicks" —
 *is* verified, literally. Counted in a real browser with trusted clicks (row,
@@ -210,8 +216,23 @@ Not derivable from the code. These were agreed with the owner.
   §5.6 asks for a wild-type/mutant toggle in the viewer. Placing a mutant side
   chain needs a packer this build does not have, and a toggle that redrew the
   wild-type residue under a "mutant" label would fabricate structural data. The
-  panel states the limitation instead. Assistant decision; reversible the moment
-  a packer lands.
+  panel states the limitation instead. **Not filed as "reversible"** — it is a
+  decision with a named path forward, recorded in `ARCHITECTURE.md` §12: a
+  backbone-dependent rotamer library (Dunbrack), most probable rotamer, labelled
+  as such, never energy-minimised. First thing to revisit when a packer lands.
+- **No validation claim rests on a rank or correlation statistic alone.**
+  `ARCHITECTURE.md` §13, now a standing rule. It came out of the DSSP work — a
+  correlation test cannot discriminate a systematic offset, because correlation is
+  invariant to the transform that produces the error. It binds Phase 6's agreement
+  column (labelled *agreement*, never *confidence*) and Phase 8's scorecard, which
+  must report a rank metric, an error metric (MAE, kcal/mol) and a bias term (mean
+  signed error) together, with the bias visually adjacent to the rank.
+- **Starting a run is idempotent on its content address.** Two identical POSTs
+  return one run and a `200` on the second. Enforced by a partial unique index
+  (migration 0003), not only by a service check, so a concurrent pair cannot both
+  insert. Failed and cancelled runs leave the index, so retrying after a genuine
+  failure starts fresh. `verify_gates.py` proves it; a direct SQL insert
+  bypassing the application is refused by the database.
 
 ## 7. Open scientific decisions — ask, never decide
 
