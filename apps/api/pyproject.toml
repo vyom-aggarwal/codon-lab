@@ -29,6 +29,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Real predictors. Kept optional because torch plus the ESM-2 checkpoint is
+# several gigabytes, and the default image must stay usable on a machine that
+# only ever runs the synthetic set. A provider whose runtime is missing declares
+# itself unavailable with that reason — it never falls back to another provider.
+#
+#   pip install -e ".[models]"
+models = [
+    "torch>=2.2",
+    "transformers>=4.40",
+]
 dev = [
     "pytest>=8.3.4",
     "ruff>=0.8.6",
@@ -43,6 +53,9 @@ build-backend = "hatchling.build"
 packages = ["catalyst"]
 
 [tool.ruff]
+# Third-party source, pinned to a commit. Reformatting it would destroy the
+# diff against upstream that makes the pin auditable.
+extend-exclude = ["catalyst/providers/_vendor"]
 line-length = 100
 target-version = "py312"
 
@@ -68,8 +81,16 @@ disallow_untyped_defs = true
 warn_return_any = false
 
 [[tool.mypy.overrides]]
-module = ["rq.*", "alembic.*", "biotite.*"]
+module = [
+    "rq.*", "alembic.*", "biotite.*", "torch.*", "transformers.*",
+    "huggingface_hub.*", "catalyst.providers._vendor.*",
+]
 ignore_missing_imports = true
+
+# Vendored third-party source is not ours to type. See _vendor/README.
+[[tool.mypy.overrides]]
+module = "catalyst.providers._vendor.*"
+ignore_errors = true
 
 # Biotite's AtomArray is a runtime-typed container: attribute access returns Any
 # because the annotation categories are dynamic. Confined to the one module that

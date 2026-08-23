@@ -41,6 +41,9 @@ class Meta(BaseModel):
     #: Configured ids that matched no predictor. Reported rather than skipped: a
     #: typo would otherwise silently remove a column from every run.
     unknown_providers: list[str]
+    #: Per objective: whether anything runnable covers it, and if not, the reason
+    #: — so the composer greys it out *with an explanation* rather than silently.
+    objective_support: dict[str, dict[str, Any]]
     queue: QueueMeta
 
 
@@ -61,6 +64,7 @@ def meta() -> Meta:
             objective.value for objective in provider_service.supported_objectives(settings)
         ),
         unknown_providers=provider_service.unknown_ids(settings),
+        objective_support=provider_service.objective_support(settings),
         queue=QueueMeta(
             connected=status.connected,
             workers=status.workers,

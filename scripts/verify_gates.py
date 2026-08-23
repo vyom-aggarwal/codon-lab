@@ -18,6 +18,7 @@ Exits non-zero on the first failure.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -32,6 +33,11 @@ for stream in (sys.stdout, sys.stderr):
 
 BASE = "http://localhost:8000"
 WEB = "http://localhost:3000"
+
+#: The Phase 6 checks that load a real model are opt-in. The default gate loop
+#: runs against CATALYST_PROVIDERS=mock and stays fast; ESM-2 650M is 2.6 GB and
+#: one forward pass per position. Set CATALYST_GATE_REAL_MODELS=1 to include them.
+REAL_MODELS = os.environ.get("CATALYST_GATE_REAL_MODELS") == "1"
 ACCESSION = "P37957"  # B. subtilis lipase A: a 31-residue signal peptide, so the
 # full-length and mature schemes genuinely disagree.
 
@@ -595,6 +601,69 @@ def main() -> int:
     page = fetch_html(f"{WEB}/runs/{big_run['id']}/workbench")
     step("the workbench screen serves", "Variant workbench" in page or "workbench" in page.lower())
     step("and carries the persistent demo bar", "Demo data" in page)
+
+    # ----------------------------------------------------------------- Phase 6
+
+    section("Phase 6: real predictors declare themselves, and never fall back")
+    _, meta = call("GET", "/meta")
+    by_id = {p["id"]: p for p in meta["predictors"]}
+    registry = fetch_html(f"{BASE}/openapi.json")  # cheap liveness on the API
+    step("the API describes its predictors", len(by_id) > 0 and bool(registry),
+         ", ".join(sorted(by_id)))
+
+    real = [p for p in by_id.values() if not p["is_mock"]]
+    mock = [p for p in by_id.values() if p["is_mock"]]
+    step("the shipped default is the synthetic set", len(mock) >= 1 and not real,
+         "CATALYST_PROVIDERS=mock, so the gate loop stays fast")
+
+    section("Phase 6: every predictor states what it will and will not answer")
+    support = meta["objective_support"]
+    step("every objective is accounted for", len(support) == 8, f"{len(support)} objectives")
+    unsupported = {name: entry for name, entry in support.items() if not entry["supported"]}
+    step("an unsupported objective carries a stated reason, never silence",
+         all(entry["reason"] for entry in unsupported.values()),
+         f"{len(unsupported)} greyed out")
+    step("an unnamed objective is supported by nobody, and says why",
+         support["other"]["supported"] is False
+         and "has not been named" in (support["other"]["reason"] or ""))
+
+    if REAL_MODELS:
+        section("Phase 6: the real predictors load and produce scores")
+        # Opt-in. Needs CATALYST_PROVIDERS to include the real set on the API and
+        # the worker, and the weights present where the worker can reach them.
+        real_ids = [p["id"] for p in by_id.values() if not p["is_mock"]]
+        step("a real predictor is configured", bool(real_ids), ", ".join(real_ids))
+
+        for predictor in (p for p in by_id.values() if not p["is_mock"]):
+            step(f"{predictor['id']} reports itself available",
+                 predictor["available"] is True,
+                 predictor["unavailable_reason"] or "")
+            step(f"{predictor['id']} carries a real weights hash",
+                 predictor["weights_hash"].startswith("sha256:")
+                 and len(predictor["weights_hash"]) == 71,
+                 predictor["weights_hash"][:26])
+            step(f"{predictor['id']} cites a DOI", "doi.org" in predictor["citation"])
+
+        _, real_goal = call("POST", f"/targets/{target_id}/goals",
+                            {"text": "improve thermostability"})
+        call("POST", f"/goals/{real_goal['id']}/confirm")
+        _, real_run = call("POST", f"/goals/{real_goal['id']}/runs", {"max_variants": 10})
+        real_run = await_run(real_run["id"])
+        step("a run with real predictors completes", real_run["status"] == "succeeded",
+             real_run.get("error") or "")
+        step("the run is NOT flagged synthetic", real_run["is_demo"] is False)
+
+        _, real_ranking = call("GET", f"/runs/{real_run['id']}/ranking?limit=10")
+        real_cells = [c for row in real_ranking["rows"] for c in row["cells"]]
+        step("real numbers are not badged synthetic",
+             bool(real_cells) and not any(c["is_mock"] for c in real_cells),
+             f"{len(real_cells)} numbers")
+        step("every real number still carries its model version",
+             all(c["model_version_id"] for c in real_cells))
+    else:
+        section("Phase 6: real-model checks skipped")
+        step("opt-in checks are available", True,
+             "set CATALYST_GATE_REAL_MODELS=1 (and CATALYST_PROVIDERS=real) to run them")
 
     print()
     if failures:

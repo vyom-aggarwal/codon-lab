@@ -3,7 +3,7 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-Status current as of **2026-08-16, end of Phase 5**.
+Status current as of **2026-08-16, end of Phase 6**.
 
 ---
 
@@ -44,14 +44,15 @@ imputed value. An unstated field means "not stated", never a plausible default.
 | 3 — constraints, goal composer, confirmable parse                   | Done        |
 | 4 — job queue, `Predictor`, `MockProvider`, run view                | Done        |
 | 5 — variant workbench, Mol\*, provenance drawer                     | Done        |
-| 6 — real `ESMScorer` + `StabilityPredictor`                         | **Next**    |
-| 7 — design sets, epistasis, wet-lab handoff                         | Not started |
+| 6 — real `ESMScorer` + `StabilityPredictor`                         | Done        |
+| 7 — design sets, epistasis, wet-lab handoff                         | **Next**    |
 | 8 — results intake, calibration, scorecard                          | Not started |
 | 9 — Playwright, a11y, README                                        | Not started |
 
-Exit gates for each phase are in `BRIEF.md` §9. Phase 6 has no stated exit
-gate; it is real `ESMScorer` + `StabilityPredictor`, disagreement surfacing and
-an agreement column.
+Exit gates for each phase are in `BRIEF.md` §9. Phase 7 has no stated exit gate;
+it is the design set builder, epistasis warnings and the wet-lab handoff exports.
+Note that exports must refuse to emit primers while any active provider is a mock
+(`BRIEF.md` §6) — that refusal is specified and not yet built.
 
 ## 4. Verify before you change anything
 
@@ -60,7 +61,7 @@ docker compose up -d
 python scripts/verify_gates.py
 ```
 
-111 checks asserting the Phase 2, 3, 4 and 5 exit gates end to end over HTTP.
+117 checks asserting the Phase 2, 3, 4, 5 and 6 exit gates end to end over HTTP.
 It seeds its own projects and targets, so it is idempotent and safe to re-run.
 **Add a section to it for each phase you complete.** The Phase 4 section needs the
 `worker` container; it checks that first and says so if nothing is consuming the
@@ -71,7 +72,7 @@ Per-package gates, all currently green:
 
 ```sh
 pnpm typecheck && pnpm lint && pnpm test           # 127 vitest
-cd apps/api && .venv/Scripts/python -m pytest -q   # 259 pytest
+cd apps/api && .venv/Scripts/python -m pytest -q   # 288 pytest, 6 skipped
 cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy catalyst
 ```
 
@@ -103,13 +104,61 @@ this must look and that judgement has not yet been made. Ask the owner to open
 **`docker compose up` is verified; a cold clone is not.** It has always run on a
 machine that already had images and a populated database.
 
-**Every scientific number in the product is currently synthetic.** The only
-provider is `MockProvider`, registered as two predictors. Its output is
-deterministic and plausibly shaped, and it is marked as synthetic in five places:
+**The shipped default is still synthetic, but real predictors now exist.**
+`CATALYST_PROVIDERS=mock` is what docker-compose sets and what the gate loop
+runs, so out of the box every number is synthetic. `CATALYST_PROVIDERS=real`
+switches on ESM-2 650M and ThermoMPNN, which need `pip install -e ".[models]"`
+and several gigabytes of weights. Mixed configurations work and badge per number,
+not per screen.
+
+With the default set, every number is synthetic and is marked so in five places:
 the persistent bar, a badge on every scoring stage, an asterisk on every
 individual number, `ModelVersion.is_mock` in the database, and `is_demo` on the
 run and the ranking. Nothing outside `catalyst/providers/mock.py` invents a
-number. Do not describe any ranking this build produces as a prediction.
+number. Do not describe a ranking from the default configuration as a prediction.
+
+**What was verified about the real predictors, and what was not.** Both were run
+directly against their real weights:
+
+- **ESM-2 650M** — every score checked against an independent masked-marginal
+  computation from the same checkpoint, exact to 4 decimal places, at three
+  positions including the last residue. This caught a genuine off-by-one during
+  development: `_token_offset` returned the *index* of the first residue and the
+  caller used it as an *additive offset*, so every substitution was scored against
+  its neighbour, producing entirely plausible numbers. `tests/test_esm.py` pins it.
+- **ThermoMPNN** — 874 of 874 crambin substitutions scored, −1.06 to 3.40 kcal/mol.
+  The sign convention was established two independent ways and both agree it is
+  destabilizing-positive, matching `BRIEF.md` §7: upstream's own
+  `retrieve_best_mutants` selects the *minimum* predicted ΔΔG as the best
+  substitution, and on real coordinates hydrophobic→charged averages +0.83 against
+  +0.42 for hydrophobic→hydrophobic.
+
+**NOT verified: the containerised real-provider path.** The API and worker images
+do not carry `[models]`, so `CATALYST_PROVIDERS=real` has never run inside Docker.
+The providers were exercised on the host venv against the same Postgres. Before
+trusting a real run in the deployed stack, build the image with the optional
+dependencies and run the opt-in gate section
+(`CATALYST_GATE_REAL_MODELS=1`).
+
+**A run abandoned mid-flight stays RUNNING forever.** Found during Phase 6
+verification: a worker killed while a stage was executing leaves `Run.status` at
+`RUNNING`, and `execute()` refuses to pick it up again because its idempotency
+guard only claims `PENDING` runs. RQ fails its own job, but nothing writes that
+back to the row. The run is then stuck — and, because the run is *active*, the
+`uq_run_active_input` index also blocks an identical re-run.
+
+Nothing reaps it. A worker heartbeat, or a startup sweep that fails runs left
+`RUNNING` with no live job, is the fix. Not built. Until then the manual recovery
+is to cancel the row:
+
+```sql
+UPDATE run SET status='CANCELLED', error='abandoned' WHERE status='RUNNING';
+```
+
+**NOT verified: ThermoMPNN's absolute accuracy.** Its position mapping and sign
+are checked; its ΔΔG values are not compared against any external benchmark,
+because none is vendored. It is a real model producing real numbers, not a
+validated one.
 
 **The Phase 5 performance gate was rewritten by the owner** (2026-08-16) from
 "10,000 rows scroll at 60fps" to **constant work per scroll update**, evidenced by

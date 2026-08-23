@@ -9,7 +9,9 @@ refuses to start.
 from __future__ import annotations
 
 from catalyst.providers.base import Predictor
+from catalyst.providers.esm import ESM2_650M
 from catalyst.providers.mock import MOCK_FITNESS, MOCK_STABILITY
+from catalyst.providers.thermompnn import THERMOMPNN
 
 #: Every predictor this build can run, by id.
 REGISTRY: dict[str, Predictor] = {
@@ -17,6 +19,8 @@ REGISTRY: dict[str, Predictor] = {
     for predictor in (
         MOCK_STABILITY,
         MOCK_FITNESS,
+        ESM2_650M,
+        THERMOMPNN,
     )
 }
 
@@ -25,6 +29,9 @@ REGISTRY: dict[str, Predictor] = {
 #: shipped docker-compose configures.
 GROUPS: dict[str, tuple[str, ...]] = {
     "mock": (MOCK_STABILITY.id, MOCK_FITNESS.id),
+    #: The real set. Each member declares itself unavailable, with a reason, if
+    #: its runtime or its weights are missing — nothing here falls back to mock.
+    "real": (ESM2_650M.id, THERMOMPNN.id),
 }
 
 

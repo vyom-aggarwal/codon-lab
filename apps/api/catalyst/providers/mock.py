@@ -96,6 +96,11 @@ class MockPredictor:
     def metric(self) -> MetricSpec:
         return self.metrics[0]
 
+    def available(self) -> str | None:
+        """Always. Arithmetic has no weights to download and nothing to install —
+        which is the entire reason this provider exists."""
+        return None
+
     def score(
         self, variants: Sequence[VariantInput], ctx: TargetContext
     ) -> list[ScoreValue]:

@@ -135,10 +135,20 @@ lets implementations be frozen dataclasses.
 Implementations: `ESMScorer` (masked-marginal log-odds), `StabilityPredictor`
 (ThermoMPNN-shaped adapter), `StructureProvider` (AlphaFold DB / uploaded PDB / ESMFold),
 `MSAProvider`, `GenerativeProvider` (ProteinMPNN / RFdiffusion — for scaffold and binder
-tasks, **not** presented as a point-mutation oracle). As of Phase 4 only `MockProvider`
-exists, registered as two predictors so that disagreement is visible.
+tasks, **not** presented as a point-mutation oracle). As of Phase 6 the registry holds
+`ESMScorer` (ESM-2 650M, masked marginals), `ThermoMPNN` (vendored, §14.3) and
+`MockProvider` as two synthetic predictors. `CATALYST_PROVIDERS` selects between them;
+`mock` and `real` are the two shorthands.
 
-**Every provider declares what it cannot do.** `Capabilities.unmet(ctx)` returns the
+**Every provider declares what it cannot do, twice over.** `available()` asks whether the
+predictor exists here at all — runtime installed, weights on disk, readable. `requires.unmet(ctx)`
+asks whether it suits *this target*. A predictor failing the first is *active* but not
+*runnable*: `services/providers.runnable()` excludes it, so no run plans a stage for it and
+the objectives it covered grey out with its reason. It never falls back to another provider,
+and it never reports a placeholder `weights_hash` — a made-up hash is indistinguishable from a
+real one in the provenance trail, which is worse than an absent column.
+
+`Capabilities.unmet(ctx)` returns the
 reason a predictor cannot run here, or `None`. The pipeline skips it with that reason,
 which travels to the cell and is shown on hover. The UI greys out objectives that no
 available provider supports, rather than running them and returning something worthless.
@@ -624,3 +634,97 @@ The bias term is rendered **visually adjacent to the rank term**, not in a detai
 panel or behind a tab. A predictor that ranks perfectly and sits 2 kcal/mol high
 must show both facts in one glance, or the scorecard has failed at the only job it
 has. A headline that is a rank statistic alone is a defect, not a simplification.
+
+---
+
+## 14. Real predictors — delegated decisions
+
+Phase 6 replaces the synthetic set with real models. Every decision below was
+delegated to the assistant by the project owner with its reasoning, and each
+records **what would change it**, because a delegated decision with no stated
+trigger becomes folklore.
+
+### 14.1 Checkpoint: `esm2_t33_650M_UR50D`
+
+The 650M checkpoint, not 150M, despite costing 31 minutes on a 550-residue target
+against 4.9 for 150M (measured on this machine: CPU only, no CUDA, no XPU).
+
+The cost does not recur. `_reuse_scores` keys on the model version, the target,
+`TargetContext.cache_key()` and the candidate set — and the context key excludes
+the objective, so a scored target is reused across goals and across projects. The
+expensive pass is paid once per (target, checkpoint, candidate set); 31 minutes
+paid once is not a reason to take a weaker model. 650M is the standard checkpoint
+for zero-shot variant effect.
+
+`JOB_TIMEOUT_SECONDS` is 3600 rather than 900 for the same reason: the first pass
+on a large target genuinely takes half an hour, and a timeout that kills it would
+make the cache impossible to fill.
+
+**150M is deliberately not registered as a second `ModelVersion`.** Adding one is
+a one-line provider registration, and Phase 8 — where a scorecard makes comparing
+checkpoints meaningful — is when it earns its place. Registering it now would ship
+a selector nobody uses.
+
+*What would change it:* a GPU, which makes the argument moot; or Phase 8 showing a
+per-lab reason to compare checkpoints, which is when 150M gets registered beside
+650M rather than instead of it.
+
+### 14.2 Scoring: masked-marginal, as `BRIEF.md` §6 specifies
+
+One forward pass per position, each with that position masked. The alternative —
+wt-marginal, a single pass over the wild-type sequence — is roughly 200x cheaper
+on a 212-residue target and is a published scheme, but it is a *different* scheme
+and generally weaker.
+
+It only wins on per-run speed, and per-run speed is not the constraint: the cache
+makes the cost per-target, not per-run. Deviating from a scientific method the
+brief names, to save a one-time cost that is already acceptable, is a bad trade.
+wt-marginal is **not** registered as an alternative either, for the same reason
+150M is not.
+
+*What would change it:* the brief changing. Not a performance argument.
+
+### 14.3 ThermoMPNN is vendored at a pinned commit
+
+Not on PyPI, so it is vendored rather than depended on. Pinned to an exact commit
+SHA — recorded in `providers/thermompnn.py` beside the licence — because a moving
+`main` would silently change what a stored `weights_hash` refers to, and the whole
+point of that field is that it does not move.
+
+*What would change it:* an upstream release on PyPI, or a deliberate upgrade, which
+is a new SHA and a new `ModelVersion` rather than an edit to an existing one.
+
+### 14.4 Which objectives each predictor may be offered for
+
+`Predictor.objectives` decides what the goal composer greys out. These are stated
+per real predictor and are **not** inherited from `mock_fitness`, whose seven
+objectives were chosen so the interface was exercisable and were never a claim
+about any real model.
+
+| Predictor  | Offered for                                                                   | Not offered for                        |
+| ---------- | ----------------------------------------------------------------------------- | -------------------------------------- |
+| ESM-2      | thermostability, activity, expression, solubility, binding affinity           | **specificity, solvent tolerance**     |
+| ThermoMPNN | thermostability                                                               | everything else, incl. solvent tolerance |
+
+**Why ESM-2 is refused specificity and solvent tolerance.** Its log-likelihood
+ratio is an evolutionary-plausibility signal. It cannot distinguish substrate
+selectivity — a variant that switches specificity while remaining perfectly
+plausible evolutionarily is exactly the case it is blind to — and there is no
+evolutionary signal for tolerance of a non-natural solvent, because nothing in the
+training distribution was selected for it.
+
+**Why ThermoMPNN is refused solvent tolerance.** It predicts the free energy change
+of folding. That is a different physical property, and offering it would invite the
+reading that a stable protein is a solvent-tolerant one.
+
+**Both are offered for thermostability on purpose.** A sequence-based evolutionary
+prior and a structure-based ΔΔG predictor disagreeing on the same variant is
+precisely the signal `BRIEF.md` §6 says to surface rather than average away — and
+per §13, their agreeing is not evidence that either is right.
+
+ESM-2's column is labelled an **evolutionary-plausibility prior**, not evidence for
+the objective in question. That label lives on `MetricSpec` and therefore travels
+with the provider, so a second screen cannot quietly restate it.
+
+*What would change it:* evidence, per objective. A specificity benchmark showing the
+LLR carries selectivity signal would be a reason to add it; an intuition would not.

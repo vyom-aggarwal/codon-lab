@@ -24,9 +24,15 @@ from catalyst.config import get_settings
 QUEUE_NAME = "catalyst"
 JOB_PATH = "catalyst.workers.jobs.execute_run"
 
-#: Generous, because a run scores the whole single-point space of a protein. It
-#: exists so a wedged job is eventually reaped, not as a performance target.
-JOB_TIMEOUT_SECONDS = 900
+#: Generous, because a run scores the whole single-point space of a protein with
+#: a real model. ESM-2 650M masked-marginal is one forward pass per position —
+#: measured at 3.4s on CPU here, so ~31 minutes for a 550-residue target. The
+#: cost is paid once per (target, checkpoint, candidate set) and then served from
+#: the content-addressed cache; a timeout that killed the first pass would make
+#: the cache impossible to fill. See ARCHITECTURE.md §14.1.
+#:
+#: It exists so a wedged job is eventually reaped, not as a performance target.
+JOB_TIMEOUT_SECONDS = 3600
 
 
 class QueueUnavailableError(RuntimeError):

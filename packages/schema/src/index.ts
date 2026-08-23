@@ -21,6 +21,9 @@ export const predictorSchema = z.object({
   modality: z.string(),
   citation: z.string(),
   is_mock: z.boolean(),
+  /** False when the runtime or the weights are missing. It never falls back. */
+  available: z.boolean().default(true),
+  unavailable_reason: z.string().nullable().default(null),
   objectives: z.array(z.string()),
   requires: z.object({
     structure: z.boolean(),
@@ -65,6 +68,22 @@ export const metaSchema = z.object({
   /** Objectives no active predictor supports are greyed out in the composer. */
   supported_objectives: z.array(z.string()),
   unknown_providers: z.array(z.string()),
+  /**
+   * Per objective: whether anything runnable covers it, and if not, the reason.
+   * The composer greys an objective out *with* its explanation — silence would
+   * leave a scientist guessing whether the tool is broken or the question is out
+   * of scope.
+   */
+  objective_support: z
+    .record(
+      z.string(),
+      z.object({
+        supported: z.boolean(),
+        predictors: z.array(z.string()),
+        reason: z.string().nullable(),
+      }),
+    )
+    .default({}),
   queue: queueSchema,
 })
 

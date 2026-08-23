@@ -206,7 +206,7 @@ export function VariantTable({
       helper.accessor((row) => row.disagreement, {
         id: 'disagreement',
         header: 'Disagreement',
-        meta: { numeric: true, subtitle: 'rank spread', width: 'w-28' },
+        meta: { numeric: true, subtitle: 'rank spread, not confidence', width: 'w-28' },
         cell: (info) => {
           const value = info.getValue()
           return value === null ? (

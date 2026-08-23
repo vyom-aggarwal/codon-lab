@@ -77,8 +77,18 @@ def test_every_predictor_declares_a_sign_convention_per_metric(predictor: Predic
 def test_a_predictor_cannot_produce_a_score_row(predictor: Predictor) -> None:
     """It returns ScoreValue, which carries no run and no model version. The
     integrity rule from ARCHITECTURE.md §5 is enforced by the type, not by
-    remembering to attach provenance later."""
-    values = predictor.score(candidates()[:3], context())
+    remembering to attach provenance later.
+
+    A predictor that refuses to run here satisfies the rule trivially and more
+    strongly — it produced nothing at all, which is what an unavailable predictor
+    must do.
+    """
+    from catalyst.providers.base import PredictorUnavailableError
+
+    try:
+        values = predictor.score(candidates()[:3], context())
+    except PredictorUnavailableError:
+        return
     for value in values:
         assert not hasattr(value, "run_id")
         assert not hasattr(value, "model_version_id")
@@ -261,3 +271,20 @@ def test_no_predictor_claims_an_unnamed_objective() -> None:
     """`other` is the bucket for an objective the parser could not name."""
     for predictor in REGISTRY.values():
         assert Objective.OTHER not in predictor.objectives
+
+
+def test_only_the_mock_predictors_declare_themselves_synthetic() -> None:
+    """The registry now holds real models beside the synthetic ones. `is_mock` is
+    what separates them, and it is what every badge in the product keys off."""
+    synthetic = {p.id for p in REGISTRY.values() if p.is_mock}
+    real = {p.id for p in REGISTRY.values() if not p.is_mock}
+    assert synthetic == {"mock_stability", "mock_fitness"}
+    assert real, "Phase 6 registers real predictors"
+    assert not (synthetic & real)
+
+
+def test_every_real_predictor_carries_a_citation_that_is_not_a_disclaimer() -> None:
+    for predictor in REGISTRY.values():
+        if predictor.is_mock:
+            continue
+        assert "doi.org" in predictor.citation

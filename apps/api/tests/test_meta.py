@@ -54,6 +54,7 @@ def test_meta_endpoint_reports_demo_mode(client: TestClient) -> None:
         "predictors",
         "supported_objectives",
         "unknown_providers",
+        "objective_support",
         "queue",
     }
     assert isinstance(body["demo_mode"], bool)

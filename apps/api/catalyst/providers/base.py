@@ -132,6 +132,11 @@ class TargetContext:
     #: No MSAProvider exists yet; this stays None and the capability check above
     #: turns it into a stated reason rather than a silent absence.
     msa: str | None = None
+    #: The coordinates themselves, for a predictor that reads structure rather
+    #: than just depending on it. Deliberately absent from `cache_key`: the
+    #: structure's content hash already identifies these bytes, and hashing the
+    #: whole file again would make every cache key megabytes long.
+    structure_text: str | None = None
 
     def cache_key(self) -> dict[str, object]:
         """The parts of the context a prediction actually depends on."""
@@ -214,6 +219,20 @@ class Predictor(Protocol):
     @property
     def metrics(self) -> tuple[MetricSpec, ...]: ...
 
+    def available(self) -> str | None:
+        """Why this predictor cannot run *at all*, or None if it can.
+
+        Distinct from `Capabilities.unmet`, which asks whether a predictor suits
+        a particular target. This asks whether it exists here: are its runtime
+        dependencies installed, are its weights on disk, can they be read.
+
+        A real predictor that cannot load must say so and produce nothing. It
+        must never fall back to another provider's output, and it must never
+        report a placeholder `weights_hash` — a made-up hash turns the entire
+        traceability claim into a lie, which is worse than an absent column.
+        """
+        ...
+
     def score(
         self, variants: Sequence[VariantInput], ctx: TargetContext
     ) -> list[ScoreValue]: ...
@@ -221,9 +240,12 @@ class Predictor(Protocol):
 
 def describe(predictor: Predictor) -> dict[str, object]:
     """The provider as data, for ``/meta`` and for the run view's stage list."""
+    unavailable = predictor.available()
     return {
         "id": predictor.id,
         "name": predictor.name,
+        "available": unavailable is None,
+        "unavailable_reason": unavailable,
         "version": predictor.version,
         "weights_hash": predictor.weights_hash,
         "modality": predictor.modality.value,

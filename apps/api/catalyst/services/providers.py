@@ -14,6 +14,8 @@ unique on (model, version, weights hash), and record whether it fabricates.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlmodel import Session, col, select
 
 from catalyst.config import Settings, get_settings
@@ -64,6 +66,17 @@ def demo_mode(settings: Settings | None = None) -> bool:
     return any(predictor.is_mock for predictor in active(settings))
 
 
+def runnable(settings: Settings | None = None) -> list[Predictor]:
+    """Active predictors that can actually run here.
+
+    A configured predictor whose runtime or weights are missing is *active* — it
+    is what the deployment asked for — but it is not runnable, and a run must not
+    plan a stage for it. It never falls back to another provider; the objective it
+    covered simply greys out with its reason.
+    """
+    return [predictor for predictor in active(settings) if predictor.available() is None]
+
+
 def supported_objectives(settings: Settings | None = None) -> set[Objective]:
     """Objectives at least one active predictor can speak to.
 
@@ -73,7 +86,7 @@ def supported_objectives(settings: Settings | None = None) -> set[Objective]:
     can support what has not been named.
     """
     covered: set[Objective] = set()
-    for predictor in active(settings):
+    for predictor in runnable(settings):
         covered |= predictor.objectives
     return covered
 
@@ -84,7 +97,7 @@ def predictors_for(
     """The active predictors that declare support for this objective."""
     if objective is None:
         return []
-    return [predictor for predictor in active(settings) if objective in predictor.objectives]
+    return [predictor for predictor in runnable(settings) if objective in predictor.objectives]
 
 
 def ensure_model_version(session: Session, predictor: Predictor) -> ModelVersion:
@@ -117,3 +130,52 @@ def ensure_model_version(session: Session, predictor: Predictor) -> ModelVersion
     session.add(created)
     session.flush()
     return created
+
+
+def objective_support(settings: Settings | None = None) -> dict[str, dict[str, Any]]:
+    """Per objective: whether anything covers it, and if not, why not.
+
+    `BRIEF.md` §6 requires the interface to grey out an objective no available
+    provider supports. Greying it out silently would leave a scientist guessing
+    whether the tool is broken or the question is out of scope, so the reason is
+    stated here — in the API, once — rather than composed by a screen that would
+    have to know which models exist.
+    """
+    predictors = active(settings)
+    support: dict[str, dict[str, Any]] = {}
+
+    for objective in Objective:
+        covering = [p for p in predictors if objective in p.objectives]
+        available = [p for p in covering if p.available() is None]
+
+        if available:
+            reason = None
+        elif covering:
+            # Something covers it in principle but cannot run here.
+            blocked = "; ".join(f"{p.name}: {p.available()}" for p in covering)
+            reason = (
+                f"The predictors that cover {objective.value.replace('_', ' ')} cannot "
+                f"run here. {blocked}"
+            )
+        elif objective is Objective.OTHER:
+            reason = (
+                "This is the bucket for an objective the parser could not name. No "
+                "predictor can support what has not been named — edit the objective "
+                "chip to something specific."
+            )
+        else:
+            covered = sorted(
+                {o.value.replace("_", " ") for p in predictors for o in p.objectives}
+            )
+            reason = (
+                f"No configured predictor is offered for "
+                f"{objective.value.replace('_', ' ')}. Between them the configured "
+                f"predictors cover: {', '.join(covered) or 'nothing'}."
+            )
+
+        support[objective.value] = {
+            "supported": bool(available),
+            "predictors": [p.id for p in available],
+            "reason": reason,
+        }
+    return support

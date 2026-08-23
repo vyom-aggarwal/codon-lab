@@ -26,7 +26,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -526,6 +526,10 @@ def execute(session: Session, run_id: uuid.UUID) -> Run:
             objective=spec.objective,
             structure=reference,
             msa=None,
+            # Filled by the retrieve-structure stage, which already fetches the
+            # coordinates for the geometry calculation. A predictor that reads
+            # structure gets the same bytes the features were measured on.
+            structure_text=None,
         ),
     )
 
@@ -774,6 +778,8 @@ def _measure_geometry(session: Session, run: Run, state: _State) -> list[str]:
         return [f"Geometry not measured: {error}"]
 
     state.features = features
+    # Same bytes the geometry was measured on, for predictors that read structure.
+    state.ctx = replace(state.ctx, structure_text=fetched.text)
     _record(
         session,
         kind=ProvenanceEventKind.FEATURES_COMPUTED,

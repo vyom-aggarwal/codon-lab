@@ -59,7 +59,7 @@ export default async function GoalPage({ params }: { params: Promise<{ id: strin
           targetId={target.id}
           goal={goals[0] ?? null}
           disabled={!target.is_designable}
-          supportedObjectives={meta.supported_objectives}
+          objectiveSupport={meta.objective_support}
         />
       </section>
 

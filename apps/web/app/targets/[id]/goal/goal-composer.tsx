@@ -36,14 +36,14 @@ export function GoalComposer({
   targetId,
   goal,
   disabled,
-  supportedObjectives,
+  objectiveSupport,
 }: {
   targetId: string
   goal: Goal | null
   disabled: boolean
-  /** Objectives at least one configured provider covers. The rest are greyed
-      out rather than run, per specification §6. */
-  supportedObjectives: string[]
+  /** Per objective: whether anything runnable covers it, and if not, why. The
+      rest are greyed out *with the reason*, per specification §6. */
+  objectiveSupport: Record<string, { supported: boolean; reason: string | null }>
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -98,7 +98,7 @@ export function GoalComposer({
         <ParsedObjective
           goal={goal}
           targetId={targetId}
-          supportedObjectives={supportedObjectives}
+          objectiveSupport={objectiveSupport}
         />
       ) : null}
     </div>
@@ -110,11 +110,11 @@ export function GoalComposer({
 function ParsedObjective({
   goal,
   targetId,
-  supportedObjectives,
+  objectiveSupport,
 }: {
   goal: Goal
   targetId: string
-  supportedObjectives: string[]
+  objectiveSupport: Record<string, { supported: boolean; reason: string | null }>
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -123,17 +123,20 @@ function ParsedObjective({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<GoalSpec>(goal.spec)
 
-  // Greyed out from what the providers declare, never from a model named here.
-  const objectiveOptions = OBJECTIVES.map((option) =>
-    supportedObjectives.includes(option.value)
-      ? option
-      : {
-          ...option,
-          disabled: true,
-          disabledReason:
-            'No configured predictor covers this objective. Running it would return numbers about something you did not ask for.',
-        },
-  )
+  // Greyed out from what the providers declare, never from a model named here —
+  // and the reason comes from the API, so the explanation is the same sentence
+  // wherever it is shown.
+  const objectiveOptions = OBJECTIVES.map((option) => {
+    const support = objectiveSupport[option.value]
+    if (!support || support.supported) return option
+    return {
+      ...option,
+      disabled: true,
+      disabledReason:
+        support.reason ??
+        'No configured predictor covers this objective. Running it would return numbers about something you did not ask for.',
+    }
+  })
 
   function save() {
     setError(null)
