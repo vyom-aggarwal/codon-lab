@@ -660,6 +660,20 @@ for zero-shot variant effect.
 on a large target genuinely takes half an hour, and a timeout that kills it would
 make the cache impossible to fill.
 
+**Measured afterwards, and the number is tighter than it looks.** A full run on
+the 212-residue lipase completed in 3363s — 93% of the 3600s budget. The ESM-2
+stage alone took 3293s, or 15.5s per position, against 3.4s per position measured
+with the machine otherwise idle. The 4.6x gap is CPU contention: a shared machine
+is the realistic case, and eight threads are already saturated by one forward
+pass, so anything else running competes directly.
+
+At the observed rate a 550-residue target needs ~142 minutes and would blow
+through the timeout. **The cap is adequate for the seeded lipase and not for the
+luciferase target already in the database.** Raising it further is one option;
+so is making the scoring stage resumable, so a killed pass does not discard the
+positions it already scored. That is a decision for the owner, not a constant to
+edit quietly.
+
 **150M is deliberately not registered as a second `ModelVersion`.** Adding one is
 a one-line provider registration, and Phase 8 — where a scorecard makes comparing
 checkpoints meaningful — is when it earns its place. Registering it now would ship

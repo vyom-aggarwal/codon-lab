@@ -133,11 +133,41 @@ directly against their real weights:
   substitution, and on real coordinates hydrophobic→charged averages +0.83 against
   +0.42 for hydrophobic→hydrophobic.
 
+**A full run with a real predictor DID complete**, on the host venv against the
+same Postgres: the 212-residue lipase, all six stages, `succeeded` in 3363s.
+`is_demo` was false, every number carried `is_mock=false`, and — because that
+particular target has no structure — ThermoMPNN **skipped with its stated reason
+and produced nothing**, which is the "a real predictor that cannot run must not
+fall back" rule verified end to end rather than in a unit test. Only ESM-2
+scored, so `disagreement` came back null rather than zero.
+
+**The timeout is tighter than the decision that set it.** That run used 93% of
+`JOB_TIMEOUT_SECONDS=3600`. The ESM-2 stage ran at 15.5s per position against
+3.4s measured on an idle machine — a 4.6x gap from CPU contention, since one
+forward pass already saturates eight threads. Extrapolated at the observed rate:
+
+| Target                    | Idle-machine rate | Observed rate |
+| ------------------------- | ----------------- | ------------- |
+| lipase, 212 aa            | 12 min            | **55 min**    |
+| luciferase, 550 aa        | 31 min            | **142 min**   |
+| ESM-2 context limit, 1022 | 58 min            | 265 min       |
+
+**So a real run on the luciferase target already in the database would be killed
+by the timeout.** Raising the cap is one fix; making the scoring stage resumable
+so a killed pass keeps the positions it already scored is a better one. Owner's
+call — do not edit the constant quietly.
+
+**NOT verified: ESM-2 and ThermoMPNN scoring the same run.** The end-to-end run
+above used a structureless target, so ThermoMPNN skipped and no disagreement was
+produced. Both predictors work individually (ThermoMPNN scored 874 of 874 crambin
+substitutions) and the aggregation is unit-tested, but the two real predictors
+disagreeing on one variant — the signal `BRIEF.md` §6 is built around — has not
+been seen.
+
 **NOT verified: the containerised real-provider path.** The API and worker images
 do not carry `[models]`, so `CATALYST_PROVIDERS=real` has never run inside Docker.
-The providers were exercised on the host venv against the same Postgres. Before
-trusting a real run in the deployed stack, build the image with the optional
-dependencies and run the opt-in gate section
+Before trusting a real run in the deployed stack, build the image with the
+optional dependencies and run the opt-in gate section
 (`CATALYST_GATE_REAL_MODELS=1`).
 
 **A run abandoned mid-flight stays RUNNING forever.** Found during Phase 6
