@@ -85,7 +85,16 @@ class RunStage(TimestampedModel, table=True):
 
 
 class Variant(TimestampedModel, table=True):
-    """A candidate, identified by its mutation list in the target's canonical scheme."""
+    """A candidate, identified by its mutation list in the target's canonical scheme.
+
+    One row per (target, code): a variant is the same variant whoever proposed it,
+    so scores from different runs and measured values from the bench all join to a
+    single row. Enforced by the database from migration 0004, because Phase 7 added
+    a second writer — the stacked-design builder — and a read-then-insert check is
+    one two concurrent writers can both pass.
+    """
+
+    __table_args__ = (UniqueConstraint("target_id", "code", name="uq_variant_target_code"),)
 
     target_id: uuid.UUID = Field(foreign_key="target.id", index=True, nullable=False)
     mutations: list[str] = Field(

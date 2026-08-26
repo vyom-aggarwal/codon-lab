@@ -665,6 +665,181 @@ def main() -> int:
         step("opt-in checks are available", True,
              "set CATALYST_GATE_REAL_MODELS=1 (and CATALYST_PROVIDERS=real) to run them")
 
+    # ----------------------------------------------------------------- Phase 7
+
+    section("Phase 7: a design set is built from one run, and says what it assumes")
+    _, design_set = call(
+        "POST",
+        f"/runs/{run['id']}/design-sets",
+        {"name": f"Gate set {stamp}", "budget_amount": 4000, "budget_currency": "USD"},
+    )
+    set_id = design_set["design_set_id"]
+    step("a design set starts from a run", bool(set_id) and design_set["run_id"] == run["id"])
+
+    # Four singles the constraints did not remove, so nothing here needs an
+    # override yet — the override path is exercised deliberately below.
+    survivors = [r["code"] for r in full["rows"] if not r["filtered_by"]][:4]
+    _, added = call("POST", f"/design-sets/{set_id}/members", {"codes": survivors})
+    step("designs are added to the set", len(added["members"]) == len(survivors),
+         f"{len(added['members'])} members")
+    step("a single-point design carries no pair flag",
+         all(not m["pairs"] for m in added["members"] if not m["is_stacked"]))
+    step("the set is labelled with the canonical scheme",
+         added["scheme_label"] == target["canonical_scheme_label"], added["scheme_label"])
+
+    section("Phase 7: stacking is combinatorial, and says what it left out")
+    call("POST", f"/design-sets/{set_id}/stack", {"codes": survivors, "size": 2})
+    _, built = call("GET", f"/design-sets/{set_id}")
+    combinations = [m for m in built["members"] if m["is_stacked"]]
+    step("every pair of the selection was built", len(combinations) == 6,
+         f"C(4,2) = 6, built {len(combinations)}")
+    step("a stacked design renders both mutation forms",
+         all("/" in m["hgvs"] and m["hgvs"].startswith("p.") for m in combinations))
+    step("a stacked design is one variant row per combination",
+         len({m["variant_id"] for m in combinations}) == len(combinations))
+
+    _, capped = call("POST", f"/design-sets/{set_id}/stack",
+                     {"codes": survivors, "size": 2, "limit": 2})
+    step("a truncated enumeration says it was truncated",
+         any("cap" in note for note in capped["notes"]), "; ".join(capped["notes"])[:70])
+
+    section("Phase 7: the 8 A pair flag is measured, not assumed")
+    warning = built["warning"]
+    step("the cutoff is the one the brief states", warning["cutoff_angstrom"] == 8.0)
+    step("the separation convention is stated, not implied",
+         "non-hydrogen" in warning["distance_convention"]
+         and "CA-CA" in warning["distance_convention"])
+    flags = [pair for m in combinations for pair in m["pairs"]]
+    step("every pair carries a proximity state", len(flags) == 6
+         and all(p["proximity"] in ("within", "beyond", "unknown") for p in flags))
+    measured_pairs = [p for p in flags if p["proximity"] != "unknown"]
+    step("this target has a structure, so the pairs were measured",
+         len(measured_pairs) == len(flags), f"{len(measured_pairs)} of {len(flags)}")
+    step("a measured pair carries its separation and no stale reason",
+         all(p["separation_angstrom"] is not None and p["reason"] is None
+             for p in measured_pairs))
+    step("the flag follows the cutoff exactly",
+         all((p["separation_angstrom"] <= 8.0) == (p["proximity"] == "within")
+             for p in measured_pairs))
+    step("the geometry manifest records what was measured on",
+         built["geometry_manifest"].get("measure")
+         == "minimum non-hydrogen atom separation",
+         str(built["geometry_manifest"].get("structure", "")))
+
+    section("Phase 7: a stacked total is arithmetic, labelled as an assumption")
+    values = {r["code"]: {c["metric"]: c["value"] for c in r["cells"]} for r in full["rows"]}
+    recomputed = 0
+    mismatched = []
+    for member in combinations:
+        for estimate in member["additive"]:
+            parts = [values.get(code, {}).get(estimate["metric"]) for code in member["mutations"]]
+            if any(part is None for part in parts):
+                continue
+            expected = round(sum(parts), 4)
+            if estimate["total"] is None or abs(estimate["total"] - expected) > 1e-6:
+                mismatched.append(f"{member['code']}/{estimate['metric']}")
+            else:
+                recomputed += 1
+    step("a stacked total is the sum of its single-mutant values",
+         recomputed > 0 and not mismatched,
+         f"{recomputed} totals recomputed independently"
+         + (f"; mismatched: {', '.join(mismatched[:3])}" if mismatched else ""))
+    step("every total carries the additivity assumption",
+         all("epistasis" in e["assumption"] and "not a prediction" in e["assumption"]
+             for m in combinations for e in m["additive"]))
+    step("a stacked total states it has no interval, rather than leaving a blank",
+         all("No interval" in e["interval_note"]
+             for m in combinations for e in m["additive"]))
+    step("the sign convention travels with the total",
+         all(e["sign_convention"] for m in combinations for e in m["additive"]))
+    step("the epistasis warning counts what it found",
+         warning["stacked_designs"] == 6 and warning["pairs_total"] == 6)
+
+    section("Phase 7: unmeasured is not the same as far apart")
+    _, bare_set = call("POST", f"/runs/{bare_run['id']}/design-sets",
+                       {"name": f"Gate bare set {stamp}"})
+    bare_set_id = bare_set["design_set_id"]
+    bare_codes = [r["code"] for r in bare_full["rows"]][:3]
+    call("POST", f"/design-sets/{bare_set_id}/members", {"codes": bare_codes})
+    call("POST", f"/design-sets/{bare_set_id}/stack", {"codes": bare_codes, "size": 2})
+    _, bare_built = call("GET", f"/design-sets/{bare_set_id}")
+    bare_flags = [p for m in bare_built["members"] for p in m["pairs"]]
+    step("a target with no structure still produces pairs", len(bare_flags) == 3)
+    step("and every one of them reads unknown, never beyond",
+         all(p["proximity"] == "unknown" for p in bare_flags))
+    step("each unknown pair carries the reason it could not be measured",
+         all(p["reason"] and "structure" in p["reason"] for p in bare_flags))
+    step("and no separation is invented for it",
+         all(p["separation_angstrom"] is None for p in bare_flags))
+    step("the warning counts unknown pairs separately from flagged ones",
+         bare_built["warning"]["pairs_unknown"] == 3
+         and bare_built["warning"]["pairs_within_cutoff"] == 0)
+
+    section("Phase 7: a constrained position needs an explicit, recorded override")
+    constrained_code = next(iter(removed))
+    status, refusal = call("POST", f"/design-sets/{set_id}/members",
+                           {"codes": [constrained_code]})
+    step("adding a constrained design is refused", status == 400, f"HTTP {status}")
+    step("and the refusal names the constraint",
+         "constrained positions" in refusal["detail"]["message"],
+         refusal["detail"]["message"][:60])
+    status, no_reason = call("POST", f"/design-sets/{set_id}/members",
+                             {"codes": [constrained_code], "override": True})
+    step("an override with no stated reason is refused too", status == 400,
+         no_reason["detail"]["message"][:50])
+    status, overridden = call(
+        "POST",
+        f"/design-sets/{set_id}/members",
+        {"codes": [constrained_code], "override": True,
+         "override_reason": "Gate check: deliberate probe of a constrained residue."},
+    )
+    step("an override with a stated reason is accepted", status == 200)
+    overridden_member = next(
+        (m for m in overridden["members"] if m["code"] == constrained_code), None
+    )
+    step("the override is recorded on the design itself",
+         overridden_member is not None
+         and overridden_member["included_via_override"] is True
+         and bool(overridden_member["override_reason"]))
+
+    section("Phase 7: exports refuse primers while anything fabricates")
+    _, preflight = call("GET", f"/design-sets/{set_id}/exports")
+    step("the run is synthetic, so the export is watermarked",
+         preflight["is_demo"] is True and bool(preflight["watermark"]))
+    step("primers are not offered", "primers_csv" not in preflight["available"],
+         ", ".join(preflight["available"]))
+    primer_refusals = [r for r in preflight["refused"] if r["what"] == "primers"]
+    step("and the refusal is stated rather than silent", bool(primer_refusals),
+         f"{len(primer_refusals)} reason(s)")
+    step("every refusal carries a remedy",
+         all(r["reason"] and r["remedy"] for r in preflight["refused"]))
+    step("the fabricating provider is named as a reason",
+         any("fabricates" in r["reason"] for r in primer_refusals))
+    status, _ = call("GET", f"/design-sets/{set_id}/exports/primers.csv")
+    step("asking for primers anyway is refused, not served", status == 409,
+         f"HTTP {status}")
+
+    csv_text = fetch_html(f"{BASE}/design-sets/{set_id}/exports/design-set.csv")
+    step("the design set itself still exports", "code,hgvs,kind" in csv_text)
+    step("and the export carries the demo watermark", "DEMO DATA" in csv_text)
+    step("and states the additivity assumption inside the file",
+         "assumed additive" in csv_text)
+    step("and carries no primer sequence column", "forward_primer" not in csv_text)
+
+    section("Phase 7: the design set screen serves")
+    page = fetch_html(f"{WEB}/runs/{run['id']}/design-sets/{set_id}")
+    # Assert this set's own content, not that a page came back. A 200 carrying
+    # an error boundary would satisfy the latter.
+    step("the builder screen serves this design set", design_set["name"] in page,
+         design_set["name"])
+    step("its stacked designs are on the page",
+         all(m["code"] in page for m in combinations[:3]),
+         f"{len(combinations)} stacked")
+    step("the epistasis warning is on the page", "assumed additive" in page.lower())
+    step("a flagged pair is marked on the page as within the cutoff",
+         "Within 8" in page)
+    step("and it carries the persistent demo bar", "Demo data" in page)
+
     print()
     if failures:
         print(f"{failures} gate check(s) FAILED.")

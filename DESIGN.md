@@ -311,6 +311,50 @@ Nothing may be added to this section without a phase named beside it.
 | `?` shortcut sheet              | `BRIEF.md` §4  | Phase 9  | It documents the shortcuts, so it follows them. The workbench path (`j`/`k`/`x`/`Enter`/`Esc`) exists and is tested; the sheet listing it does not.                                                |
 | Wild-type / mutant rotamer toggle | `BRIEF.md` §5.6 | Unscheduled | Needs a side-chain packer. Redrawing the wild-type residue under a "mutant" label would fabricate structural data. See `ARCHITECTURE.md` §12 for the decision and the Dunbrack path forward.       |
 | Dark mode toggle                | `BRIEF.md` §4  | Unscheduled | Tokens are defined in §1.2 and ship; the toggle does not. Per the brief, it lands only if a phase comes in early.                          |
+| Wet-lab handoff screen          | `BRIEF.md` §5.8 | Phase 7, blocked | The **refusal** ships (`services/exports`): primers are refused while any provider fabricates, and again because no target carries a coding DNA sequence to design against. The screen that would show primers, a plate map and a PDF report does not exist, and cannot until a construct's DNA can be attached. `ARCHITECTURE.md` §16. |
+| Codon usage and plate map       | `BRIEF.md` §5.8 | Phase 7, blocked | Same blocker. A gene fragment can legitimately be back-translated; a primer cannot, and the two ship together. |
 
 **Row-height compaction (`26px`) is not deferred** — it is built, in the workbench
 filter rail.
+
+---
+
+## 10. The epistasis warning
+
+Added in Phase 7, and the one place in the product where a panel is allowed to be
+loud. `BRIEF.md` §5.7 asks for "an unmissable warning"; this is what that means
+concretely, and what it deliberately does not mean.
+
+**It is `--warn`, the token reserved for flags, epistasis warnings and demo mode.**
+Not `--negative`: nothing has failed. A stacked design is a legitimate thing to
+order, and the warning is a caveat on how to read its number, not an error.
+
+**It is not dismissible**, for the same reason the demo bar is not (§1.10). A
+warning a user can close is a warning that is absent from the screenshot which
+ends up in a slide deck.
+
+**It renders from data, never from a component's judgement.** The API returns
+`warning.stacked_designs`, and zero is what turns the panel off. The assumption
+sentence itself comes from `domain/epistasis`, so it lives with the arithmetic
+that needs it and a second screen cannot quietly soften the wording.
+
+**No third typographic mark was added.** §1.11 says two marks exist and a third
+needs a reason of the same weight. The pair flag did not qualify: it is a badge on
+a row, in `--warn`, and an unmeasured pair is the ordinary em dash of §1.10's
+neighbour — `EmptyCell` with the reason on hover. The marks stay at two.
+
+### Three states, three renderings
+
+The rule that shapes the whole panel: **`unknown` must not look like `beyond`.**
+
+| State     | Rendering                                                        |
+| --------- | ---------------------------------------------------------------- |
+| `within`  | separation in `--warn`, tabular, plus a `Within 8 Å` badge        |
+| `beyond`  | separation in `--text-muted`, tabular, no badge                   |
+| `unknown` | the words "not measured" in `--text-faint`, reason on hover       |
+
+`--text-faint` is permitted here because it is doing exactly the job §1.3 reserves
+it for — the value is genuinely absent and the text carries no information the
+user must read; the reason does, and that is in the tooltip and again in the panel
+summary. The summary counts unknown pairs on its own line whenever there are any,
+so the absence is legible without hovering anything.

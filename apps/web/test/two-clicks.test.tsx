@@ -1,5 +1,8 @@
 import type { Ranking, Run } from '@catalyst/schema'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+import { ToastProvider } from '@/components/ui/toast'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -169,14 +172,22 @@ function renderWorkbench(withRun: Run = run, withRanking: Ranking = ranking) {
     true,
   )
 
+  // The same providers `app/layout.tsx` wraps the tree in, in the same order.
+  // The workbench's footer mounts the design-set dialog, which uses both a
+  // toast and a tooltip; rendering it with less context than the application
+  // gives it would be testing a tree the user never sees.
   const view = render(
     <QueryClientProvider client={client}>
-      <Workbench
-        run={withRun}
-        initialRanking={withRanking}
-        targetName="Luciferin 4-monooxygenase"
-        apiBase="http://localhost:8000"
-      />
+      <TooltipProvider delayDuration={300}>
+        <ToastProvider>
+          <Workbench
+            run={withRun}
+            initialRanking={withRanking}
+            targetName="Luciferin 4-monooxygenase"
+            apiBase="http://localhost:8000"
+          />
+        </ToastProvider>
+      </TooltipProvider>
     </QueryClientProvider>,
   )
   return Object.assign(clicks, { container: view.container })

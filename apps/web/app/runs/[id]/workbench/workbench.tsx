@@ -3,8 +3,11 @@
 import type { Ranking, Run, ScoreCell } from '@catalyst/schema'
 import { useQuery } from '@tanstack/react-query'
 import { Columns3 } from 'lucide-react'
+import type { Route } from 'next'
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { AddToSetDialog } from '@/components/design/add-to-set-dialog'
 import { InlineError } from '@/components/inline-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -78,6 +81,13 @@ export function Workbench({
 
   const [tracedCell, setTracedCell] = useState<ScoreCell | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const designSets = useQuery({
+    queryKey: ['design-sets', run.id],
+    queryFn: () => api.fetchDesignSets(run.id),
+    enabled: selected.length > 0,
+    staleTime: 30_000,
+  })
 
   const query = useQuery({
     queryKey: ['ranking', run.id, filters.includeRemoved],
@@ -278,10 +288,24 @@ export function Workbench({
           {rows.length.toLocaleString()} of {allRows.length.toLocaleString()} shown
         </span>
         {selected.length > 0 ? (
-          <Button size="sm" variant="ghost" onClick={clearSelection}>
-            Clear selection
-          </Button>
+          <>
+            <AddToSetDialog
+              runId={run.id}
+              codes={selected}
+              existing={designSets.data ?? []}
+              onAdded={clearSelection}
+            />
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              Clear selection
+            </Button>
+          </>
         ) : null}
+        <Link
+          href={`/runs/${run.id}/design-sets` as Route}
+          className="text-12 text-text-muted hover:text-text"
+        >
+          Design sets
+        </Link>
         <span className="text-12 text-text-faint ml-auto">
           j / k move · x selects · Enter opens · Esc closes
         </span>

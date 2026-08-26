@@ -742,3 +742,169 @@ with the provider, so a second screen cannot quietly restate it.
 
 *What would change it:* evidence, per objective. A specificity benchmark showing the
 LLR carries selectivity signal would be a reason to add it; an intuition would not.
+
+---
+
+## 15. The design set builder
+
+Screen §5.7. Selection into a set, combinatorial stacking, the epistasis warning,
+the 8 Å pair flag, and a running budget. Four decisions carry the weight.
+
+### A design set belongs to exactly one run
+
+`DesignSet.run_id` is `NOT NULL` (migration `0004_design_sets`). The builder shows
+an additive total across stacked mutations, and that total is arithmetic over
+scores. A total assembled from two different runs' scores would be untraceable in
+precisely the way §5 forbids: each component would carry a provenance trail and
+their sum would carry none. Requiring the run makes "which run produced these
+numbers" answerable by the schema rather than by convention.
+
+The same migration adds `uq_variant_target_code`. `services/runs._ensure_candidates`
+already treated a variant as the same variant whoever proposed it — reusing rows
+across runs so Phase 8's measured values join to one row — but enforced it with a
+read-then-insert that two concurrent writers can both pass. Phase 7 introduces a
+second writer of variant rows (the stacking builder), so the guarantee moved into
+the database *before* there were two callers rather than after.
+
+### An additive total is derived, never stored, and never called a prediction
+
+No model scored the double mutant. Summing two single-mutant values is the same
+kind of object as the consensus in `domain/aggregate`: arithmetic over persisted
+scores, recomputed on read, and impossible to write as a `Score` because there is
+no `ModelVersion` that produced it (§4).
+
+Two properties are enforced by the type rather than by a component remembering:
+
+- **`AdditiveEstimate.assumption` is a required field.** A total cannot travel
+  anywhere without the sentence saying what it assumes. `BRIEF.md` §5.7 calls the
+  warning unmissable; making it structural is how that is guaranteed rather than
+  hoped for.
+- **A missing component makes the total `None`.** If one mutation in a stack has
+  no value for a metric, there is no total — not the sum of the rest. A partial
+  sum understates the design by exactly the contribution nobody measured, and it
+  does so wearing the authority of a number. The contributions that *do* exist are
+  still returned, so the interface can show what is known without implying a total.
+
+There is no interval on a stacked total. `BRIEF.md` §7 requires an interval on a
+ΔΔG; the singles carry none, and the additivity assumption itself has no
+uncertainty attached. `interval_note` says that in as many words rather than
+leaving a blank that reads as zero uncertainty. This is the same open thread as
+the ThermoMPNN interval conflict — see `HANDOFF.md` §9.
+
+### Proximity has three states, and `unknown` is one of them
+
+`BRIEF.md` §5.7 fixes the cutoff: "a flag on any pair within 8Å of each other".
+The brief does not say how the distance is taken, so this build uses the
+convention §11 already settled for distance to the active site — **minimum
+non-hydrogen atom separation, not Cα–Cα** — rather than inventing a second one.
+
+That is not cosmetic, and the claim is measured rather than asserted. On crambin
+(1CRN), residues 1 and 46 sit **7.9 Å** apart at their closest heavy atoms and
+**11.8 Å** apart at their alpha carbons. Under the brief's 8 Å rule the two
+conventions **disagree about whether that pair is flagged at all** — one tells a
+bench scientist the mutations may interact and the other tells them they are
+independent. `tests/test_pair_distances.py` pins both that pair and 7/32, which
+flips the same way. Mutating the implementation to Cα–Cα fails three of its tests.
+
+`domain/epistasis.Proximity` is `WITHIN | BEYOND | UNKNOWN`, not a nullable
+boolean, because a nullable boolean lets one `if` treat an unmeasured pair as a
+safe one. A pair is `UNKNOWN` when there is no structure, when the numbering was
+never reconciled, or when the coordinates do not resolve one of the residues — and
+it always carries the reason. The warning reports `pairs_unknown` **beside**
+`pairs_within_cutoff` for the same reason the scorecard puts bias beside rank
+(§13): a screen reading only the flagged count would report "no pairs are close"
+for a target with no structure, which is a claim nobody checked.
+
+### A price is never invented
+
+`domain/costing`. Oligo and synthesis pricing varies by vendor, scale, contract and
+country, and the decision this product exists to serve is whether to spend $4,000
+of ordering budget (`BRIEF.md` §1). Unit prices are therefore a **project setting
+with no default** — the same treatment the RSA cutoffs get in §11 — and an unset
+price produces `total = None` with the reason, not a plausible figure.
+
+An absent price is not zero: zero is a claim that something is free. Any single
+unpriced line makes the whole total unavailable, for the same reason a missing
+component kills an additive total. `over_budget` is `None` rather than `False`
+when either side is unknown, and two currencies are never compared, because an
+exchange rate is one more number nobody stated.
+
+This is the only number in the product withheld for a non-scientific reason. It is
+withheld on the same principle: §4's honesty boundary is about not fabricating
+numbers a user will act on, and a price is the most directly actionable number on
+the screen.
+
+---
+
+## 16. The wet-lab handoff
+
+Screen §5.8. **The refusal is built; the primer designer is not.** That ordering is
+deliberate — `BRIEF.md` §6 makes refusing primers from synthetic scores a
+non-negotiable, and an honesty invariant added *after* the feature it constrains is
+an invariant that was absent for however long the feature shipped without it.
+
+`services/exports` is the single entry point, so nothing can route around the
+refusal. It reports **every** applicable reason rather than the first: fixing one
+and being handed the next is how a user concludes a feature is broken.
+
+### Why primers are refused today
+
+1. **Any provider in the run fabricates.** Read from the stored `ModelVersion.is_mock`
+   rows of the run the set belongs to, never from `CATALYST_PROVIDERS`, so a run
+   recorded months ago still reports what actually produced it (§4). A synthetic
+   ΔΔG is recognisable as synthetic on screen because it is badged; an oligo
+   ordered off the back of one is not recognisable as anything.
+2. **The target has no coding DNA sequence.** `Target` carries a one-letter amino
+   acid sequence and nothing else. A site-directed mutagenesis primer anneals to
+   the template actually on the bench, so there is nothing here to design against.
+
+The second is a **specification gap, not an implementation gap**, and it blocks
+§5.8 for both seeded targets. Back-translating the protein through a codon usage
+table would produce a plausible DNA sequence that is *not* the user's plasmid;
+primers against it would fail to anneal, which is a fabrication that costs a
+synthesis order and a week of bench time. It is refused with a remedy instead.
+`services/exports._coding_sequence` is the single place that changes when a coding
+sequence becomes attachable.
+
+Note the asymmetry, because it is the useful distinction: a **gene fragment** is
+DNA ordered de novo and *can* legitimately be produced by codon-optimised
+back-translation. A **primer** must match a template that already exists. Only the
+second is refused for this reason.
+
+What is not refused is the design set itself — codes, pair flags, assumed-additive
+totals and their provenance are real records of what the run said. They export as
+CSV, watermarked whenever anything in the run fabricated, and the pair column uses
+the three-state vocabulary so "not measured" survives the trip into a spreadsheet,
+which is exactly where a blank would be read as "fine".
+
+### 16.1 Delegated decisions: the primer chemistry
+
+`BRIEF.md` §5.8 requires primers "Tm-matched, with the algorithm and parameters
+stated". Those are scientific defaults, which the working agreement reserves for
+the owner. They were put to the owner on 2026-08-25 and **delegated back** — the
+same pattern §14 records for Phase 6. They are written down here, with what would
+change each, because a delegated decision with no stated trigger becomes folklore.
+
+**None of this is implemented.** It is blocked on the coding sequence above, not on
+the decisions. Recording them now is what stops them being re-litigated from
+scratch when the blocker clears.
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| **Tm algorithm** | Nearest-neighbour, SantaLucia & Hicks 2004, with the published internal-mismatch parameters | Every SDM primer is mismatched to the template *by construction*. Only an NN model carrying mismatch parameters can state a first-cycle Tm honestly; the QuikChange formula's `− %mismatch` term is a linear fudge, not a measurement. |
+| **Implementation** | Biopython's `Bio.SeqUtils.MeltingTemp`, not hand-rolled | §11's rule, applied to a second domain: *the calculation is not ours*. A transcribed thermodynamic table is the unvalidated-radii-table failure in a different costume, and this one has ~100 more numbers to mistype. |
+| **Salt correction** | Owczarzy 2004 (monovalent) plus Owczarzy 2008 (Mg²⁺ and dNTP) | A Tm quoted without the buffer it was computed in is not reproducible, and Mg²⁺ moves it by several degrees. |
+| **Reaction conditions** | A **project setting**, defaults stated and citable, no hidden constant | Labs differ. Same treatment as the RSA cutoffs (§11) and the cost basis (§15) — a scientific parameter is visible, editable, and copied into the record. |
+| **Primer layout** | Liu & Naismith 2008 partially overlapping (doi:10.1186/1472-6750-8-91) | Peer-reviewed and **kit-independent** — any high-fidelity polymerase plus DpnI. It fixes the documented primer-dimer failure of fully complementary QuikChange pairs without tying the product's output to one vendor's enzyme mix. |
+| **Which duplex the Tm describes** | **Both**, labelled: primer against wild-type template (cycle 1) and against the mutant product | They are two different annealing events and a single number would silently stand for both. "Tm-matched" then means matched on the cycle-1 value, which is what limits whether the reaction primes at all. |
+
+One consequence worth stating plainly, because it is the trap: the QuikChange
+manual's "Tm ≥ 78 °C" acceptance rule is calibrated **against its own empirical
+formula**. Applying that threshold to a nearest-neighbour Tm is a category error —
+the two are different scales. A build that offers the QuikChange formula must carry
+its threshold with it, not share one.
+
+*What would change these:* a lab stating that its protocol's acceptance rule is
+calibrated on the empirical scale, in which case the kit's own formula is correct
+*for that kit* and gets registered beside this one rather than replacing it —
+exactly as §14.1 leaves room for a second ESM-2 checkpoint.

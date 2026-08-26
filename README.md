@@ -12,8 +12,11 @@ budget on it.
 The gap is not capability. It is **trust**. This is built for someone skeptical, busy,
 and correct.
 
-> **Status: Phases 1–6 of 9 complete.** Real ESM-2 and ThermoMPNN run and are verified;
-> the shipped default is a pair of synthetic providers that badge every number they invent.
+> **Status: Phases 1–6 of 9 complete; Phase 7 partially.** Real ESM-2 and ThermoMPNN run
+> and are verified; the shipped default is a pair of synthetic providers that badge every
+> number they invent. The design set builder and its epistasis warnings ship. The wet-lab
+> handoff does **not**: primers are refused, with the reason stated, because no target
+> carries a coding DNA sequence to design against.
 > [What is and is not verified](#what-is-not-verified) is tracked as carefully as the
 > code, because on this project that distinction *is* the product.
 
@@ -85,7 +88,7 @@ Verify the whole thing end to end over HTTP:
 python scripts/verify_gates.py
 ```
 
-**117 checks** asserting every phase exit gate against a live stack. It seeds its own
+**162 checks** asserting every phase exit gate against a live stack. It seeds its own
 projects and targets, so it is idempotent and safe to re-run. A full pass fetches from
 UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few minutes.
 
@@ -321,9 +324,9 @@ the boundary a future caller actually crosses.
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test          # 127 vitest, 8 files
-cd apps/api && .venv/Scripts/python -m pytest -q  # 288 pytest, 6 skipped (opt-in)
+cd apps/api && .venv/Scripts/python -m pytest -q  # 336 pytest, 6 skipped (opt-in)
 cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy catalyst   # strict
-python scripts/verify_gates.py                    # 117 checks, live stack
+python scripts/verify_gates.py                    # 162 checks, live stack
 ```
 
 The design system is enforced mechanically rather than by discipline:
@@ -404,9 +407,12 @@ per target class. Over three projects the lab learns which predictor to trust fo
 chemistry. `BRIEF.md` §2 calls it "the entire moat" — that is the owner's read of the
 market, recorded here as their claim rather than a survey this repo has run.
 
-Open scientific decisions are tracked in `HANDOFF.md` §7 and are **never** decided by the
-implementation — primer Tm parameters (Phase 7) and fuzzy-join thresholds (Phase 8) are
-both still open.
+Open scientific decisions are tracked in `HANDOFF.md` §9 and are **never** decided by the
+implementation. They are put to the owner; where the owner delegates one back, it is
+recorded in `ARCHITECTURE.md` with its reasoning and with what would change it, so a
+delegated decision does not decay into folklore. The primer Tm algorithm and its
+parameters went that way on 2026-08-25 (`ARCHITECTURE.md` §16.1); fuzzy-join thresholds
+for Phase 8 are still open.
 
 ---
 

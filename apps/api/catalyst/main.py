@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from catalyst import __version__
 from catalyst.config import get_settings
-from catalyst.routes import goals, meta, projects, runs, targets
+from catalyst.routes import design_sets, goals, meta, projects, runs, targets
 
 app = FastAPI(
     title="CatalystAI API",
@@ -32,3 +32,4 @@ app.include_router(projects.router)
 app.include_router(targets.router)
 app.include_router(goals.router)
 app.include_router(runs.router)
+app.include_router(design_sets.router)

@@ -553,3 +553,146 @@ export const runDiffSchema = z.object({
 })
 
 export type RunDiff = z.infer<typeof runDiffSchema>
+
+// --------------------------------------------------------------------------- //
+// Design sets — specification §5.7
+// --------------------------------------------------------------------------- //
+
+/**
+ * Whether two mutated positions are close enough to interact structurally.
+ *
+ * Three states, not two. `unknown` means the separation could not be measured —
+ * no structure, unreconciled numbering, or a residue the coordinates do not
+ * resolve — and it must never be rendered the way `beyond` is. A component that
+ * treats "not within" as "safely apart" would tell a bench scientist two
+ * mutations are independent on the basis of no evidence at all.
+ */
+export const proximitySchema = z.enum(['within', 'beyond', 'unknown'])
+
+export type Proximity = z.infer<typeof proximitySchema>
+
+export const pairFlagSchema = z.object({
+  a_code: z.string(),
+  b_code: z.string(),
+  a_position: z.number().int(),
+  b_position: z.number().int(),
+  proximity: proximitySchema,
+  /** Minimum non-hydrogen atom separation, angstroms. Null when unknown. */
+  separation_angstrom: z.number().nullable(),
+  /** Why the separation is unknown. Null unless `proximity` is `unknown`. */
+  reason: z.string().nullable(),
+})
+
+export type PairFlag = z.infer<typeof pairFlagSchema>
+
+export const additiveSchema = z.object({
+  metric: z.string(),
+  label: z.string(),
+  unit: z.string().nullable(),
+  sign_convention: z.string(),
+  /** Null whenever any component lacks a value. Never a partial sum. */
+  total: z.number().nullable(),
+  contributions: z.array(z.object({ code: z.string(), value: z.number() })),
+  missing: z.array(z.string()),
+  /** The additivity statement. Always present — see `domain/epistasis`. */
+  assumption: z.string(),
+  interval_note: z.string(),
+})
+
+export type Additive = z.infer<typeof additiveSchema>
+
+export const designMemberSchema = z.object({
+  variant_id: z.string().uuid(),
+  code: z.string(),
+  hgvs: z.string(),
+  mutations: z.array(z.string()),
+  sequence_positions: z.array(z.number().int()),
+  is_stacked: z.boolean(),
+  included_via_override: z.boolean(),
+  override_reason: z.string().nullable(),
+  pairs: z.array(pairFlagSchema),
+  additive: z.array(additiveSchema),
+})
+
+export type DesignMember = z.infer<typeof designMemberSchema>
+
+export const costLineSchema = z.object({
+  description: z.string(),
+  quantity: z.number().int(),
+  length: z.number().int(),
+  unit: z.string(),
+  amount: z.number().nullable(),
+  unpriced_reason: z.string().nullable(),
+})
+
+export const costSchema = z.object({
+  currency: z.string().nullable(),
+  /** Null when anything is unpriced. No price is ever invented. */
+  total: z.number().nullable(),
+  lines: z.array(costLineSchema),
+  unavailable_reason: z.string().nullable(),
+  budget_amount: z.number().nullable(),
+  budget_currency: z.string().nullable(),
+  /** Null, never false, when either side is unknown. */
+  over_budget: z.boolean().nullable(),
+  remaining: z.number().nullable(),
+})
+
+export type Cost = z.infer<typeof costSchema>
+
+/**
+ * The epistasis warning as data. Specification §5.7 requires it to be
+ * unmissable, so it arrives with the set rather than being assembled by a
+ * component that could forget it.
+ */
+export const epistasisWarningSchema = z.object({
+  stacked_designs: z.number().int(),
+  assumption: z.string(),
+  cutoff_angstrom: z.number(),
+  distance_convention: z.string(),
+  pairs_total: z.number().int(),
+  pairs_within_cutoff: z.number().int(),
+  /** Counted separately so "no structure" cannot read as "nothing is close". */
+  pairs_unknown: z.number().int(),
+})
+
+export type EpistasisWarning = z.infer<typeof epistasisWarningSchema>
+
+export const designSetSchema = z.object({
+  design_set_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  name: z.string(),
+  note: z.string().nullable(),
+  scheme_label: z.string(),
+  members: z.array(designMemberSchema),
+  warning: epistasisWarningSchema,
+  cost: costSchema,
+  geometry_manifest: z.record(z.string(), z.unknown()).default({}),
+  geometry_note: z.string().nullable().default(null),
+  is_demo: z.boolean(),
+})
+
+export type DesignSet = z.infer<typeof designSetSchema>
+
+export const designSetSummarySchema = z.object({
+  design_set_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  name: z.string(),
+  note: z.string().nullable(),
+  budget_amount: z.number().nullable(),
+  budget_currency: z.string().nullable(),
+})
+
+export type DesignSetSummary = z.infer<typeof designSetSummarySchema>
+
+export const designSetListSchema = z.array(designSetSummarySchema)
+
+export const stackResultSchema = z.object({
+  design_set_id: z.string().uuid(),
+  /** What was left out and why. Never empty when anything was skipped. */
+  notes: z.array(z.string()),
+})
+
+export type StackResult = z.infer<typeof stackResultSchema>

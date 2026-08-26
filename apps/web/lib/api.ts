@@ -1,6 +1,9 @@
 import {
   constraintListSchema,
   constraintSchema,
+  designSetListSchema,
+  designSetSchema,
+  designSetSummarySchema,
   filteredSchema,
   goalListSchema,
   goalSchema,
@@ -13,11 +16,14 @@ import {
   runDiffSchema,
   runListSchema,
   runSchema,
+  stackResultSchema,
   sequenceTrackSchema,
   suggestionListSchema,
   targetSchema,
   type Constraint,
   type ConstraintKind,
+  type DesignSet,
+  type DesignSetSummary,
   type Filtered,
   type Goal,
   type GoalSpec,
@@ -30,6 +36,7 @@ import {
   type Run,
   type RunDiff,
   type SequenceTrack,
+  type StackResult,
   type Suggestion,
   type Target,
 } from '@catalyst/schema'
@@ -321,6 +328,69 @@ export async function deleteConstraint(constraintId: string): Promise<void> {
   if (!response.ok) {
     throw new ApiError(
       `The API returned ${response.status} removing that constraint.`,
+      'Reload the page and try again.',
+    )
+  }
+}
+
+/* ------------------------------------------------------------ design sets */
+
+export function fetchDesignSets(runId: string): Promise<DesignSetSummary[]> {
+  return request(`/runs/${runId}/design-sets`, designSetListSchema)
+}
+
+export function fetchDesignSet(designSetId: string): Promise<DesignSet> {
+  return request(`/design-sets/${designSetId}`, designSetSchema)
+}
+
+export function createDesignSet(
+  runId: string,
+  body: {
+    name: string
+    note?: string
+    budget_amount?: number | null
+    budget_currency?: string | null
+  },
+): Promise<DesignSetSummary> {
+  return send(`/runs/${runId}/design-sets`, body, designSetSummarySchema)
+}
+
+/**
+ * Adds designs to a set. The API refuses a constrained position unless
+ * `override` is true *and* a reason is given, and records every override —
+ * specification §7. The refusal is deliberately not pre-empted here: a check
+ * that lives only on a screen is a check the API does not have.
+ */
+export function addDesignMembers(
+  designSetId: string,
+  body: { codes: string[]; override?: boolean; override_reason?: string },
+): Promise<DesignSet> {
+  return send(`/design-sets/${designSetId}/members`, body, designSetSchema)
+}
+
+export function stackDesigns(
+  designSetId: string,
+  body: { codes: string[]; size: number; limit?: number },
+): Promise<StackResult> {
+  return send(`/design-sets/${designSetId}/stack`, body, stackResultSchema)
+}
+
+export async function removeDesignMember(
+  designSetId: string,
+  variantId: string,
+): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl()}/design-sets/${designSetId}/members/${variantId}`, {
+      method: 'DELETE',
+      cache: 'no-store',
+    })
+  } catch {
+    throw new ApiError('Cannot reach the API.', 'Start the stack with `docker compose up`.')
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      `The API returned ${response.status} removing that design.`,
       'Reload the page and try again.',
     )
   }

@@ -36,7 +36,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version as package_version
 from io import StringIO
-from itertools import pairwise
+from itertools import combinations, pairwise
 from typing import Any, Literal
 
 import biotite.structure as struc
@@ -400,3 +400,96 @@ def _active_site_distances(
         deltas = protein.coord[begin:end, None, :] - active_coords[None, :, :]
         distances[key] = round(float(np.sqrt((deltas**2).sum(axis=-1)).min()), 1)
     return distances
+
+
+@dataclass(frozen=True, slots=True)
+class PairSeparations:
+    """Minimum non-hydrogen atom separation between mutated positions.
+
+    `separations` is keyed by an ordered pair of 1-based sequence indices. A pair
+    that is absent was not measurable, and `unresolved` says which positions the
+    coordinates do not contain. Nothing is interpolated: a residue missing from a
+    crystal structure has no distance, and reporting one would invent geometry.
+    """
+
+    separations: dict[tuple[int, int], float]
+    #: Sequence positions the structure does not resolve, or the scheme cannot name.
+    unresolved: tuple[int, ...]
+    manifest: dict[str, Any] = field(default_factory=dict)
+
+
+def pairwise_min_distances(
+    *,
+    structure_text: str,
+    chain_id: str,
+    author_labels: Sequence[str | None],
+    positions: Collection[int],
+) -> PairSeparations:
+    """Separation between every pair drawn from `positions`, in angstroms.
+
+    Minimum non-hydrogen atom separation, not CA-CA — the same convention this
+    module uses for distance to the active site, and for the same reason: an
+    arginine side chain reaches roughly 7A past its own CA, so a CA measurement
+    would report two residues as independent while their side chains touch.
+
+    This is what specification §5.7's 8A pair flag is measured with. The rule
+    itself lives in `domain/epistasis`, which is pure; this function only
+    measures, and a pair it cannot measure is simply absent from the result.
+    """
+    wanted = sorted({int(position) for position in positions})
+    if len(wanted) < 2:
+        return PairSeparations(separations={}, unresolved=(), manifest={})
+
+    atoms = _load(structure_text)
+    protein_mask = struc.filter_amino_acids(atoms)
+    if not protein_mask.any():
+        raise StructureFeatureError(
+            "No amino acid residues were found in that structure.",
+            "Check the file, or attach a different structure.",
+        )
+    protein = atoms[protein_mask]
+
+    # The atom index range of each residue, so a pair's distance is computed over
+    # whole residues rather than over a representative atom.
+    spans: dict[tuple[str, str], tuple[int, int]] = {}
+    starts: list[int] = [int(start) for start in struc.get_residue_starts(protein)]
+    starts.append(protein.array_length())
+    for begin, end in pairwise(starts):
+        spans[
+            _residue_key(
+                str(protein.chain_id[begin]),
+                int(protein.res_id[begin]),
+                str(protein.ins_code[begin]),
+            )
+        ] = (begin, end)
+
+    resolved: dict[int, tuple[int, int]] = {}
+    unresolved: list[int] = []
+    for position in wanted:
+        label = author_label_at(author_labels, position)
+        span = spans.get((chain_id, label)) if label is not None else None
+        if span is None:
+            unresolved.append(position)
+            continue
+        resolved[position] = span
+
+    separations: dict[tuple[int, int], float] = {}
+    for first, second in combinations(sorted(resolved), 2):
+        a_begin, a_end = resolved[first]
+        b_begin, b_end = resolved[second]
+        deltas = protein.coord[a_begin:a_end, None, :] - protein.coord[None, b_begin:b_end, :]
+        separations[(first, second)] = round(
+            float(np.sqrt((deltas**2).sum(axis=-1)).min()), 1
+        )
+
+    return PairSeparations(
+        separations=separations,
+        unresolved=tuple(unresolved),
+        manifest={
+            "measure": "minimum non-hydrogen atom separation",
+            "chain_measured": chain_id,
+            "atoms": "heavy atoms only; hydrogens, waters and monoatomic ions stripped",
+            "positions_requested": len(wanted),
+            "positions_resolved": len(resolved),
+        },
+    )

@@ -20,7 +20,16 @@ from catalyst.models.enums import AssayKind
 
 
 class DesignSet(TimestampedModel, table=True):
+    """A set of variants selected for ordering, derived from one run.
+
+    `run_id` is NOT NULL on purpose. The builder shows an additive total across
+    stacked mutations, and that total is arithmetic over scores; assembling it
+    from two different runs would produce a number whose components are each
+    traceable and whose sum is not. See migration 0004.
+    """
+
     project_id: uuid.UUID = Field(foreign_key="project.id", index=True, nullable=False)
+    run_id: uuid.UUID = Field(foreign_key="run.id", index=True, nullable=False)
     name: str
     note: str | None = Field(default=None)
     budget_currency: str | None = Field(default=None)
