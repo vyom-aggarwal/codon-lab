@@ -3,422 +3,640 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-Status current as of **2026-08-16, end of Phase 6**.
+**Status current as of 2026-08-25.** HEAD is `90e6f40` on `main`, working tree
+clean, and `git ls-remote origin main` confirms the remote is at the same commit.
 
----
+Read these first, in this order. This file is the entry point and deliberately
+does **not** duplicate them.
 
-## 1. Read these, in this order
-
-| #   | File              | What it gives you                                                                        | Authority                                                                |
-| --- | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| #   | File              | What it gives you                                                                        | Authority                                                               |
+| --- | ----------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | 1   | `BRIEF.md`        | What the product is, why, all nine screens, the phase plan with exit gates, domain rules | **The owner's specification.** Verbatim. Never edited to match the code. |
-| 2   | `DESIGN.md`       | Every colour, type size, space, radius, shadow, easing — and what is banned              | Contract. Update in the same commit as any deviation.                    |
-| 3   | `ARCHITECTURE.md` | Module boundaries, the numbering subsystem, the confirmation gate, state ownership       | Contract. Same rule.                                                     |
-| 4   | This file         | Status, what is unverified, decisions made in conversation, machine quirks               | Status. Rots. Trust code and tests over it.                              |
+| 2   | `DESIGN.md`       | Every colour, type size, space, radius, shadow, easing — and what is banned              | Contract. Update in the same commit as any deviation.                   |
+| 3   | `ARCHITECTURE.md` | Module boundaries, the numbering subsystem, the confirmation gate, delegated decisions   | Contract. Same rule.                                                    |
+| 4   | `README.md`       | The public face: invariants, the engineering worth reading, measured performance         | Audited claim by claim (`90e6f40`). Keep it that way.                   |
+| 5   | This file         | Status, what is unverified, decisions taken in conversation, machine quirks              | Status. Rots. Trust code and tests over it.                             |
 
 If this file contradicts `BRIEF.md`, the brief wins. If it contradicts the code,
 the code wins and this file needs fixing.
 
-## 2. The three things that must never break
+---
 
-From `BRIEF.md` §2 — everything else is table stakes:
+## 1. Orientation
 
-1. **Parse, then confirm.** Nothing runs from an objective the user has not
-   explicitly confirmed. Enforced in `services/goals.require_confirmed`, not in
-   the UI, because workers are a second caller.
-2. **Every number is traceable.** A `Score` cannot exist without a
-   `ModelVersion` and a `Run` — `NOT NULL` foreign keys, asserted by tests that
-   no future migration may relax.
-3. **The validation loop** (Phase 8). The brief calls it the entire moat.
+**CatalystAI** is a protein-engineering copilot. A wet-lab scientist types a goal
+in plain English — "make this lipase survive 65 °C in 30% DMSO" — and the app
+returns a ranked, defensible list of specific point mutations, each traceable to
+the model, version and weights hash that produced it. The audience is a bench
+protein engineer who is skeptical, busy, and correct: the models that could help
+them (ESM, ProteinMPNN, ThermoMPNN, AlphaFold) are Python repos with CUDA
+requirements rather than tools, so they either go unused or get run once from a
+colleague's notebook and never trusted enough to spend $4,000 of ordering budget
+on. The gap being closed is **trust**, not capability.
 
-And the honesty rule that cuts across all three: **never fabricate a scientific
-number outside `MockProvider`.** Unavailable means `—` with a tooltip, never an
-imputed value. An unstated field means "not stated", never a plausible default.
+It is a solo build by the repo owner (`vyom-aggarwal`), executed across multiple
+assistant sessions against a fixed nine-phase plan in `BRIEF.md` §9. **Phases 1–6
+of 9 are complete and committed.** Phase 7 is next and not started. Nothing is
+deployed; everything runs locally under Docker on the owner's Windows 11 machine.
 
-## 3. Where things stand
+---
 
-| Phase                                                               | State       |
-| ------------------------------------------------------------------- | ----------- |
-| 1 — monorepo, Docker, migrations, token layer, primitives, one page | Done        |
-| 2 — target setup, numbering reconciliation, sequence track          | Done        |
-| 3 — constraints, goal composer, confirmable parse                   | Done        |
-| 4 — job queue, `Predictor`, `MockProvider`, run view                | Done        |
-| 5 — variant workbench, Mol\*, provenance drawer                     | Done        |
-| 6 — real `ESMScorer` + `StabilityPredictor`                         | Done        |
-| 7 — design sets, epistasis, wet-lab handoff                         | **Next**    |
-| 8 — results intake, calibration, scorecard                          | Not started |
-| 9 — Playwright, a11y, README                                        | Not started |
+## 2. Mission & scope
 
-Exit gates for each phase are in `BRIEF.md` §9. Phase 7 has no stated exit gate;
-it is the design set builder, epistasis warnings and the wet-lab handoff exports.
-Note that exports must refuse to emit primers while any active provider is a mock
-(`BRIEF.md` §6) — that refusal is specified and not yet built.
+### The goal in the owner's words
 
-## 4. Verify before you change anything
+From `BRIEF.md` §2, unchanged since the first commit — three things make this
+worth building, and everything else is table stakes:
 
-```sh
+1. **Parse, then confirm — never silently interpret.** Nothing runs from an
+   objective the user has not explicitly confirmed.
+2. **Every number is traceable** — in two clicks, to model, version, weights
+   hash, inputs, run, timestamp. A provenance record as a first-class entity, not
+   a log file.
+3. **The validation loop** (Phase 8) — measured bench results joined to
+   predictions, a persistent per-predictor scorecard. The brief calls it "the
+   entire moat."
+
+Cutting across all three: **never fabricate a scientific number.** Unavailable
+means `—` with a tooltip, never an imputed value. An unstated field means "not
+stated", never a plausible default.
+
+### How scope moved during this session
+
+The mission did not change. Four scope decisions were made by the owner mid-flight:
+
+- **The Phase 5 performance gate was rewritten** from "10,000 rows scroll at
+  60fps" to **constant work per scroll update**. Frame rate cannot be measured
+  from an agent session, so the owner replaced an unmeasurable gate with the
+  structural property it rests on. See §8.
+- **The rank-statistic finding was generalised into a standing rule.** The
+  assistant reported that a DSSP-correlation test could not discriminate a radii
+  set; the owner accepted it and directed that it be applied forward everywhere
+  the brief made the same assumption. Now `ARCHITECTURE.md` §13, and it binds
+  Phase 8's scorecard design.
+- **Four Phase 6 decisions were explicitly delegated** to the assistant with the
+  requirement that each be recorded in `ARCHITECTURE.md` §14 with "what would
+  change it." Done.
+- **The README was pulled forward** from Phase 9. It is written and audited; the
+  rest of Phase 9 is untouched.
+
+### Explicitly out of scope
+
+- **Mutant rotamers in the 3D viewer.** `BRIEF.md` §5.6 asks for a wild-type /
+  mutant toggle. Dropped — placing a mutant side chain needs a packer this build
+  does not have, and redrawing the wild-type residue under a "mutant" label would
+  fabricate structural data. Path forward named in `ARCHITECTURE.md` §12.
+- **Registering ESM-2 150M or wt-marginal scoring as alternatives.** Both are
+  deliberate non-features until Phase 8 makes comparing them meaningful
+  (`ARCHITECTURE.md` §14.1, §14.2).
+- **Any pre-filter on the design space.** A run scores every substitution at
+  every nameable position, then ranks, then applies the budget the user stated.
+- **GPU support.** Everything measured here is CPU-only. Not refused, just absent.
+- **Deployment, auth, multi-user.** Nothing in the brief asks for them.
+
+---
+
+## 3. Current state
+
+Blunt version: **the backend is genuinely strong and the frontend has never been
+looked at by a human being.** That asymmetry is the single most important thing
+to know.
+
+### Works end to end, verified
+
+- **Phases 1–6 complete**, each with an exit gate asserted in
+  `scripts/verify_gates.py` (117 checks, over HTTP, against a live stack).
+- **A full six-stage run completes with a real predictor.** The 212-residue
+  lipase, `succeeded` in 3363s, `is_demo` false, every number `is_mock=false`.
+- **ESM-2 650M runs and is correct.** Every score checked against an independent
+  masked-marginal recomputation from the same checkpoint, exact to 4 decimal
+  places, at three positions including the last residue.
+- **ThermoMPNN runs.** 874 of 874 crambin substitutions scored, −1.06 to 3.40
+  kcal/mol, sign convention established two independent ways.
+- **"Unavailable means unavailable" is proven end to end**, not just unit-tested:
+  on that real run the target had no structure, so ThermoMPNN **skipped with its
+  stated reason and produced nothing** rather than falling back.
+- **All local gates green**, re-run 2026-08-25 after provider files changed on
+  disk: 288 pytest (6 skipped), 127 vitest across 8 files, ruff clean, mypy
+  strict clean on 60 source files, `pnpm typecheck` and `pnpm lint` clean.
+
+### Half-built
+
+- **The MSA stage is a real stage that always skips.** `_stage_build_msa` in
+  `services/runs.py:812` emits a stated reason and no alignment. Consequently the
+  conservation column is disabled and the >90%-conservation high-risk flag from
+  `BRIEF.md` §7 is unimplemented.
+- **`Variant.region` is declared and never populated** (`models/run.py:107`,
+  nullable, default `None`). Burial lives in the run's `FEATURES_COMPUTED`
+  provenance event instead, because a variant is shared across runs and the
+  cutoffs are not. The column needs to be deliberately populated or dropped.
+- **Exports must refuse primers while any provider is a mock** (`BRIEF.md` §6).
+  Specified, not built — it lands with Phase 7.
+- **The real-provider path has never run inside Docker.** The API and worker
+  images do not carry the `[models]` extra. Both predictors were exercised on the
+  host venv against the same Postgres.
+
+### Broken / known-bad
+
+- **A run abandoned mid-flight stays `RUNNING` forever.** `execute()` only claims
+  `PENDING` runs; RQ fails its own job without writing back. Nothing reaps it,
+  and `uq_run_active_input` then blocks an identical re-run. Manual recovery in §8.
+- **`JOB_TIMEOUT_SECONDS = 3600` is marginal.** The lipase run used 93% of it. A
+  550-residue target needs ~142 min at the observed rate and **would be killed** —
+  and such a target (luciferase P08659) is already seeded in the database.
+- **A stale UI string.** `apps/web/app/runs/[id]/workbench/workbench.tsx:51`
+  labels the conservation column `'Requires MSA (Phase 6)'`. Phase 6 shipped
+  without an MSA provider, so the label now names the wrong phase.
+
+---
+
+## 4. Architecture map
+
+### Stack (verified from manifests)
+
+| Layer     | Choice                                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Monorepo  | pnpm workspaces — `apps/web`, `apps/api`, `packages/schema`                                                            |
+| Web       | Next.js `^15.1.4` App Router, React `^19.0.0`, TypeScript `^5.7.3` strict, Tailwind `^4.0.0`                            |
+| Web state | TanStack Query `^5.101.4`, Table `^8.21.3` (**pinned to v8**), Virtual `^3.14.9`, Zustand `^5.0.15`, Mol\* `^5.11.0`   |
+| API       | FastAPI `>=0.115.6`, Python 3.12, Pydantic `>=2.10.4`, SQLModel `>=0.0.22`, Alembic `>=1.14.0`, psycopg 3               |
+| Queue     | RQ `>=2.1.0` on Redis `>=5.2.1`                                                                                        |
+| Science   | biotite `>=1.0`; optional `[models]` extra: torch `>=2.2`, transformers `>=4.40`                                        |
+| Contract  | `packages/schema` — Zod `^3.24.1`, 555 lines, the only module both apps depend on                                      |
+
+### Layering rule (`apps/api`)
+
+Dependencies point downward only; a module never imports from a layer above it.
+
+```
+routes/      HTTP surface. Request/response models. No business logic.
+services/    Orchestration: build a run, aggregate scores, apply constraints.
+providers/   Predictor implementations. The ONLY place a model client may be imported.
+features/    Derived structural features — geometry, not model output.
+sources/     External retrieval: UniProt, RCSB, AlphaFold DB, PDB, FASTA.
+parsers/     Free-text goal → structured objective. Claude, with a deterministic fallback.
+domain/      Pure logic. No I/O, no database. Numbering, mutation codes, aggregation.
+models/      SQLModel tables. No behaviour beyond validators.
+```
+
+`workers/` sits beside `routes/` as a **second entry point at the same level** —
+which is exactly why the confirmation gate lives in `services/`, not in a route
+and never in the UI.
+
+**The one rule that shapes everything: the UI must never import a model client.**
+Verified 2026-08-25 — grep for `esm`, `thermompnn`, `proteinmpnn` across
+`apps/web` returns nothing. The test for whether it still holds: adding a fourth
+stability predictor must touch zero files under `apps/web/components`.
+
+### Data flow
+
+```
+Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
+  → user confirms in the composer → services/goals.require_confirmed
+  → POST /runs → services/runs.create (idempotent on content address)
+  → RQ enqueue → workers/ → services/runs.execute
+      stage 1 retrieve structure
+      stage 2 build MSA          (always skips today)
+      stage 3 score × N predictors  → ScoreValue → Score (+ ModelVersion, + Run)
+      stage 4 aggregate          (ranks only, never raw scores)
+      stage 5 filter by constraints
+      stage 6 rank
+  → GET /runs/{id}/ranking → workbench
+```
+
+### Files that matter most
+
+| Path                                              | Role                                     | Why it matters                                                                                     |
+| ------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `apps/api/catalyst/providers/base.py`             | The `Predictor` Protocol                 | The single seam. `ScoreValue` carries no run/model — structurally incapable of an untraceable number |
+| `apps/api/catalyst/services/runs.py`              | The six-stage pipeline (~1500 lines)     | Every run flows through it; the only place a `Score` is created                                      |
+| `apps/api/catalyst/services/goals.py:162`         | `require_confirmed`                      | Invariant 1. In the service layer because workers are a second caller                                |
+| `apps/api/catalyst/models/run.py:118`             | `Score` table                            | Invariant 2. `model_version_id` and `run_id` both `nullable=False`; no migration may relax it        |
+| `apps/api/catalyst/providers/mock.py`             | The two synthetic predictors             | The **only** module permitted to invent a number. `is_mock` drives the whole demo apparatus          |
+| `apps/api/catalyst/providers/esm.py`              | ESM-2 650M, masked marginals             | Holds `_residue_token_start` — the off-by-one that shipped and was caught. Touch with care           |
+| `apps/api/catalyst/providers/thermompnn.py`       | ThermoMPNN ΔΔG                           | Vendored at a pinned SHA; hashes both its own and ProteinMPNN's weights                              |
+| `apps/api/catalyst/domain/numbering.py`           | Scheme reconciliation                    | `reconcile()` returns `NEEDS_ALIGNMENT` and stops. Never infers silently                             |
+| `apps/api/catalyst/domain/schemes.py`             | sequence index ↔ author numbering        | Pure functions so numbering is testable headlessly. `positions_by_label` refuses duplicate labels    |
+| `apps/api/catalyst/domain/aggregate.py`           | Rank-based consensus                     | Never averages raw scores. Null (not zero) disagreement for a single opinion                         |
+| `apps/api/catalyst/domain/hashing.py`             | `content_hash`                           | Content addressing and run idempotency both rest on it                                               |
+| `apps/api/catalyst/features/structure.py`         | SASA / RSA / burial via biotite          | Every pinned parameter and its citation live here                                                    |
+| `apps/api/catalyst/domain/constants/max_asa.py`   | Tien et al. 2013 theoretical MaxASA      | The reference table, with DOI. Swapping it moves 27 of 1BTL's 263 residues                           |
+| `apps/web/app/runs/[id]/workbench/workbench.tsx`  | The main screen                          | Assembles filter rail, table, inspector. Holds the stale conservation label at line 51               |
+| `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
+| `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
+| `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
+| `scripts/verify_gates.py`                         | 117 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
+
+---
+
+## 5. Environment & runbook
+
+Machine is **Windows 11 Home, PowerShell 5.1**. Git Bash is also available and is
+usually the better shell for anything with heredocs or POSIX quoting.
+
+### From a clean clone
+
+```powershell
+# 1. Node toolchain
+corepack enable --install-directory "$env:APPDATA\npm"
+pnpm install
+
+# 2. Environment
+Copy-Item .env.example .env      # then fill in values
+
+# 3. Bring the stack up (runs migrations and seeds automatically)
 docker compose up -d
-python scripts/verify_gates.py
 ```
 
-117 checks asserting the Phase 2, 3, 4, 5 and 6 exit gates end to end over HTTP.
-It seeds its own projects and targets, so it is idempotent and safe to re-run.
-**Add a section to it for each phase you complete.** The Phase 4 section needs the
-`worker` container; it checks that first and says so if nothing is consuming the
-queue. The Phase 5 section loads a 550-residue target and runs it, so a full pass
-now takes a few minutes and several UniProt/AlphaFold fetches.
+`docker compose up` runs, in the `api` container:
+`alembic upgrade head && python -m catalyst.seed && uvicorn catalyst.main:app --host 0.0.0.0 --port 8000 --reload`
 
-Per-package gates, all currently green:
+Then open <http://localhost:3000>.
 
-```sh
-pnpm typecheck && pnpm lint && pnpm test           # 127 vitest
-cd apps/api && .venv/Scripts/python -m pytest -q   # 288 pytest, 6 skipped
-cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy catalyst
+### Services and ports
+
+| Service  | Image / command                    | Host port                | Notes                                    |
+| -------- | ---------------------------------- | ------------------------ | ---------------------------------------- |
+| postgres | `postgres:17-alpine`               | **5433** (`POSTGRES_PORT`) | 5432 is taken by another project on this machine |
+| redis    | `redis:7-alpine`                   | 6379 (`REDIS_PORT`)      |                                          |
+| api      | FastAPI / uvicorn                  | 8000                     | Migrates + seeds on boot                 |
+| worker   | `python -m catalyst.workers.worker`| —                        | Without it, runs stay queued forever     |
+| web      | `pnpm --filter @catalyst/web dev`  | 3000                     |                                          |
+
+### Environment variable **names** (values never recorded here)
+
+From `.env.example`: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`,
+`POSTGRES_PORT`, `DATABASE_URL`, `REDIS_URL`, `CORS_ORIGINS`,
+`CATALYST_PROVIDERS`, `ANTHROPIC_API_KEY`, `CATALYST_PARSER_MODEL`,
+`NEXT_PUBLIC_API_URL`.
+
+Set in `docker-compose.yml` but **absent from `.env.example`** — worth knowing:
+`API_INTERNAL_URL` (`http://api:8000`, required by web server components) and
+`REDIS_PORT`. Opt-in flags used only by tests and gates: `CATALYST_TEST_REAL_MODELS=1`,
+`CATALYST_GATE_REAL_MODELS=1`.
+
+`CATALYST_PROVIDERS` defaults to `mock`. `real` switches on ESM-2 650M and
+ThermoMPNN and requires the optional extra.
+
+### Running the real models
+
+```powershell
+cd apps\api
+pip install -e ".[models]"       # torch + transformers, several GB
+# then set CATALYST_PROVIDERS=real
 ```
 
-Python tests are hermetic — no database, no network, no Redis. Anything that
+### Tests and gates
+
+```powershell
+pnpm typecheck; pnpm lint; pnpm test              # 127 vitest across 8 files
+cd apps\api; .venv\Scripts\python -m pytest -q    # 288 pytest, 6 skipped (opt-in real-model)
+cd apps\api; .venv\Scripts\ruff check .           # clean
+cd apps\api; .venv\Scripts\mypy catalyst          # strict, clean, 60 files
+python scripts\verify_gates.py                    # 117 checks, needs the live stack
+```
+
+Python tests are **hermetic** — no database, no network, no Redis. Anything that
 genuinely crosses Postgres is asserted in `verify_gates.py` instead, because that
-is the boundary a future caller actually crosses. Keep it that way.
+is the boundary a future caller actually crosses. **Keep it that way.**
 
-The design system is enforced mechanically, not by discipline:
-`apps/web/test/tokens.test.ts` fails the build on a hex literal, an off-scale
-type size, a stock Tailwind radius, a gradient, `backdrop-blur`, emoji, a third
-shadow, or `rounded-full` outside status dots. It also asserts `DESIGN.md` and
-`tokens.css` agree on every colour value. **If you need a new size or colour, add
-a token to `DESIGN.md` — do not reach for an arbitrary value.**
+A full `verify_gates.py` pass fetches from UniProt, RCSB and AlphaFold DB and
+executes real design runs, so it takes several minutes. It seeds its own projects
+and targets and is safe to re-run.
 
-## 5. What is NOT verified — read before claiming anything works
+### Windows-specific gotchas
 
-**The Claude goal parser has never run against the real API.** No
-`ANTHROPIC_API_KEY` is configured, so every parse falls back to the deterministic
-rule parser and is badged as such in the UI. Its failure branches (refusal,
-truncation, non-JSON, API error) are covered hermetically in
-`tests/test_claude_parser.py` against a fake client. The live path is
-unexercised. Do not describe it as working until it has been called.
+- **PowerShell 5.1 corrupts here-strings containing double quotes** when passing
+  them to native commands. Write long commit messages to a file and use
+  `git commit -F <file>`, or use the Bash tool's heredoc.
+- **The Windows console is cp1252** and cannot encode `→` or `°`.
+  `verify_gates.py` reconfigures its own streams to UTF-8; anything else printing
+  those characters needs `PYTHONIOENCODING=utf-8`.
+- **`pnpm` is a corepack shim** in `%APPDATA%\npm`. Reinstall command above.
+- **Docker Desktop** lives under `%LOCALAPPDATA%\Programs\DockerDesktop` and will
+  **not start from a non-interactive process** — a human must launch it.
+- **Adding a web dependency needs the image rebuilt, not just restarted.**
+  `node_modules` lives in anonymous volumes that shadow the bind mount, so
+  installing on the host is invisible to the container:
+  `docker compose up -d --build --renew-anon-volumes web`
+- **`docker compose rm -f web` does not drop those anonymous volumes.** Use
+  `docker compose rm -fsv web` (note the `v`), then `up -d`.
+- **The agent's browser pane runs hidden, so the page never composites.**
+  `requestAnimationFrame` does not fire — anything driven by animation frames
+  (virtualised scrolling, transitions, screenshots) cannot be observed from an
+  agent session. Plain DOM reads, `fetch`, timers and MutationObserver work.
 
-**No screen has been looked at by a human.** Rendering was verified by fetching
-HTML and asserting on content — not pixels. `BRIEF.md` §4 is emphatic about how
-this must look and that judgement has not yet been made. Ask the owner to open
-`localhost:3000` before Phase 9, ideally sooner.
+---
 
-**`docker compose up` is verified; a cold clone is not.** It has always run on a
-machine that already had images and a populated database.
+## 6. Decisions & rationale
 
-**The shipped default is still synthetic, but real predictors now exist.**
-`CATALYST_PROVIDERS=mock` is what docker-compose sets and what the gate loop
-runs, so out of the box every number is synthetic. `CATALYST_PROVIDERS=real`
-switches on ESM-2 650M and ThermoMPNN, which need `pip install -e ".[models]"`
-and several gigabytes of weights. Mixed configurations work and badge per number,
-not per screen.
+The hardest thing to recover once the conversation is gone. Decisions that live
+in a document are cross-referenced rather than restated.
 
-With the default set, every number is synthetic and is marked so in five places:
-the persistent bar, a badge on every scoring stage, an asterisk on every
-individual number, `ModelVersion.is_mock` in the database, and `is_demo` on the
-run and the ranking. Nothing outside `catalyst/providers/mock.py` invents a
-number. Do not describe a ranking from the default configuration as a prediction.
+### Delegated to the assistant by the owner, recorded in `ARCHITECTURE.md` §14
 
-**What was verified about the real predictors, and what was not.** Both were run
-directly against their real weights:
+Each carries "what would change it", because a delegated decision with no stated
+trigger becomes folklore.
 
-- **ESM-2 650M** — every score checked against an independent masked-marginal
-  computation from the same checkpoint, exact to 4 decimal places, at three
-  positions including the last residue. This caught a genuine off-by-one during
-  development: `_token_offset` returned the *index* of the first residue and the
-  caller used it as an *additive offset*, so every substitution was scored against
-  its neighbour, producing entirely plausible numbers. `tests/test_esm.py` pins it.
-- **ThermoMPNN** — 874 of 874 crambin substitutions scored, −1.06 to 3.40 kcal/mol.
-  The sign convention was established two independent ways and both agree it is
-  destabilizing-positive, matching `BRIEF.md` §7: upstream's own
-  `retrieve_best_mutants` selects the *minimum* predicted ΔΔG as the best
-  substitution, and on real coordinates hydrophobic→charged averages +0.83 against
-  +0.42 for hydrophobic→hydrophobic.
+| Decision                                        | Rationale in one line                                                                                | What would change it                              |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **ESM-2 650M**, not 150M (§14.1)                | The cost does not recur — the cache is keyed per (target, checkpoint, candidate set), not per run    | A GPU, or Phase 8 giving a reason to compare       |
+| **`JOB_TIMEOUT_SECONDS` 3600**, not 900 (§14.1) | The first pass on a large target genuinely takes half an hour                                        | Making the scoring stage resumable instead         |
+| **Masked-marginal scoring** (§14.2)             | `BRIEF.md` §6 names it. wt-marginal is ~200× cheaper but a *different*, weaker scheme                | The brief changing. Not a performance argument     |
+| **ThermoMPNN vendored at a pinned SHA** (§14.3) | Not on PyPI; a moving `main` would silently change what a stored `weights_hash` refers to           | An upstream PyPI release — a new SHA, new ModelVersion |
+| **Objectives stated per predictor** (§14.4)     | Inheriting `mock_fitness`'s seven would have a stability model answering a specificity question      | Evidence about a specific model's coverage         |
 
-**A full run with a real predictor DID complete**, on the host venv against the
-same Postgres: the 212-residue lipase, all six stages, `succeeded` in 3363s.
-`is_demo` was false, every number carried `is_mock=false`, and — because that
-particular target has no structure — ThermoMPNN **skipped with its stated reason
-and produced nothing**, which is the "a real predictor that cannot run must not
-fall back" rule verified end to end rather than in a unit test. Only ESM-2
-scored, so `disagreement` came back null rather than zero.
+ESM-2 is offered for thermostability, activity, expression, solubility and
+binding affinity — and **deliberately refused** specificity and solvent
+tolerance. ThermoMPNN is thermostability only. Both are offered for
+thermostability **on purpose**: their disagreement is the signal `BRIEF.md` §6 is
+built around.
 
-**The timeout is tighter than the decision that set it.** That run used 93% of
-`JOB_TIMEOUT_SECONDS=3600`. The ESM-2 stage ran at 15.5s per position against
-3.4s measured on an idle machine — a 4.6x gap from CPU contention, since one
-forward pass already saturates eight threads. Extrapolated at the observed rate:
+### Scientific decisions settled by the owner (Phase 5), encoded in `ARCHITECTURE.md` §11
 
-| Target                    | Idle-machine rate | Observed rate |
-| ------------------------- | ----------------- | ------------- |
-| lipase, 212 aa            | 12 min            | **55 min**    |
-| luciferase, 550 aa        | 31 min            | **142 min**   |
-| ESM-2 context limit, 1022 | 58 min            | 265 min       |
+- RSA = ASA / MaxASA using **Tien et al. 2013 *theoretical*** (doi:10.1371/journal.pone.0080635).
+- Shrake–Rupley via **biotite**, probe 1.4 Å, 1000 points, **ProtOr radii** (Tsai
+  et al. 1999), heavy atoms only. The owner's instruction was explicit: *do not
+  write a SASA implementation.*
+- Region cutoffs: core RSA < 0.25, boundary 0.25–0.40, surface > 0.40 — as a
+  **project setting** with those defaults, not a constant, because it is a
+  scientific decision.
+- Distance to active site is the **minimum non-hydrogen atom separation** to the
+  residues the user annotated, not Cα–Cα. An arginine side chain reaches ~7 Å
+  past its own Cα. Nothing is inferred — no pocket detection, no database lookup.
+- No conservation column until an MSA provider exists.
 
-**So a real run on the luciferase target already in the database would be killed
-by the timeout.** Raising the cap is one fix; making the scoring stage resumable
-so a killed pass keeps the positions it already scored is a better one. Owner's
-call — do not edit the constant quietly.
+### Standing rules that bind future phases
 
-**NOT verified: ESM-2 and ThermoMPNN scoring the same run.** The end-to-end run
-above used a structureless target, so ThermoMPNN skipped and no disagreement was
-produced. Both predictors work individually (ThermoMPNN scored 874 of 874 crambin
-substitutions) and the aggregation is unit-tested, but the two real predictors
-disagreeing on one variant — the signal `BRIEF.md` §6 is built around — has not
-been seen.
+- **No validation claim rests on a rank or correlation statistic alone**
+  (`ARCHITECTURE.md` §13). Origin: a DSSP-agreement test was supposed to validate
+  the radii set and **cannot** — swapping ProtOr for a uniform radius *raised*
+  correlation to r = 0.998 while moving 8 of 1BTL's 263 residues across a region
+  boundary. Correlation is invariant to monotonic transforms, and a systematic
+  offset, a scale error and a miscalibration are all monotonic. **Binds Phase 8:**
+  the scorecard must report a rank metric **and** an error metric (MAE, kcal/mol)
+  **and** a bias term (mean signed error), with bias visually adjacent to rank.
+- **Agreement is never called confidence.** Predictors trained on overlapping data
+  share their biases; agreeing means they are alike, not that either is right.
+- **Consensus is a mean of normalised ranks, not of scores**, and is **not
+  stored** — it is not a model output and would need a fabricated `ModelVersion`
+  to become a `Score`. Recomputed from stored scores on every read.
+- **A run scores the entire single-point space and narrows afterwards.** Any
+  pre-filter would be a scientific choice made without asking.
+- **Starting a run is idempotent on its content address.** Enforced by a partial
+  unique index (migration `0003_run_idempotency.py`), not only a service check, so
+  a concurrent pair cannot both insert. Failed and cancelled runs leave the index.
+- **`weights_hash` is a SHA-256 of the bytes actually loaded.** Never a
+  placeholder — a made-up hash is indistinguishable from a real one in a
+  provenance trail, which turns the whole claim into a lie.
 
-**NOT verified: the containerised real-provider path.** The API and worker images
-do not carry `[models]`, so `CATALYST_PROVIDERS=real` has never run inside Docker.
-Before trusting a real run in the deployed stack, build the image with the
-optional dependencies and run the opt-in gate section
-(`CATALYST_GATE_REAL_MODELS=1`).
+### Earlier decisions, still standing
 
-**A run abandoned mid-flight stays RUNNING forever.** Found during Phase 6
-verification: a worker killed while a stage was executing leaves `Run.status` at
-`RUNNING`, and `execute()` refuses to pick it up again because its idempotency
-guard only claims `PENDING` runs. RQ fails its own job, but nothing writes that
-back to the row. The run is then stuck — and, because the run is *active*, the
-`uq_run_active_input` index also blocks an identical re-run.
+- **Tooling and dependency choices are delegated to the assistant** — pick them,
+  state the reason in one line, do not open a question. **Scientific defaults are
+  the opposite: always escalate.**
+- **Goal parsing is Claude with a deterministic fallback**, not a form and not
+  rules-only. The fallback is the offline path and the test path, not a degraded
+  mode.
+- **Parser model defaults to `claude-opus-5`** (`CATALYST_PARSER_MODEL`). An
+  earlier Sonnet 5 suggestion was withdrawn — downgrading for cost is the owner's
+  call, not the assistant's.
+- **UniProt constraint annotations are suggestions, never auto-applied**, and
+  every position is translated into the canonical scheme first.
+- **Alignment uses identity scoring, not BLOSUM62.** Assistant decision, flagged
+  for review, **not yet re-confirmed**. `ARCHITECTURE.md` §9. Reversible.
+- **Mutant rotamers dropped**, with a named path forward (`ARCHITECTURE.md` §12):
+  a backbone-dependent rotamer library (Dunbrack), most probable rotamer, labelled
+  as such, never energy-minimised. Filed as a decision, **not** as "reversible" —
+  the owner pushed back on that framing specifically.
+- **Proposed but never agreed:** doing Phase 8 before Phase 6. Moot now.
 
-Nothing reaps it. A worker heartbeat, or a startup sweep that fails runs left
-`RUNNING` with no live job, is the fix. Not built. Until then the manual recovery
-is to cancel the row:
+---
+
+## 7. Conventions & working preferences
+
+### The working agreement, as the owner has stated it repeatedly
+
+- Build in the numbered phases from `BRIEF.md` §9. Before changing anything,
+  **verify the existing gates** — if they fail, stop and report rather than
+  proceeding.
+- **Ask about open scientific decisions before writing code, and wait for an
+  answer.** Do not begin a phase whose science is unsettled.
+- After each phase: extend `scripts/verify_gates.py` with a section asserting that
+  phase's exit gate; update this file in the **same commit**; run every gate; fix
+  everything red; commit with a real message.
+- **Stop and check in at the end of each phase. Do not silently continue.**
+- Report plainly what was verified, what could not be verified, and what was left
+  out.
+- A smaller number of finished screens beats a full skeleton.
+- Ask before adding a dependency outside `BRIEF.md` §3.
+
+### Corrections the owner made during this session — these are the real signal
+
+1. **"Verify that literally — count the clicks — rather than asserting the drawer
+   exists."** On the two-clicks gate. Asserting that a component exists is not
+   verifying a gate about user actions. The result used `event.isTrusted` in a
+   real browser.
+2. **"Never invent a threshold, cutoff, or sign convention."** Stated verbatim in
+   two separate turns.
+3. **"Measure the 10,000-row scroll — do not assert it. If you cannot measure it,
+   say so rather than claiming it."** And afterwards: *"Frame rate becomes a
+   manual check I run in a real browser. Don't claim it in code comments or docs
+   until I do."*
+4. **"Don't file it as 'reversible'; file it as a decision in `ARCHITECTURE.md`
+   with the path forward named."** On the rotamer toggle. A deferred feature is a
+   decision, not an open question.
+5. **"`DESIGN.md` currently describes a palette that doesn't exist, which breaks
+   the working agreement about docs matching the build."** Docs and code move in
+   the same commit — this is enforced, not aspirational.
+6. **"Your correction is accepted, and it generalises further than the test…
+   apply that finding forward, because the brief has the same bug twice more."**
+   A finding is not done when the one test is fixed.
+7. **"You have not run it. Do not report `StabilityPredictor` as working until you
+   have."** Working means executed, not implemented.
+8. On mixed real/mock output: **"the demo flag is per-provider, not global, and
+   mixed real/mock results must still badge every mock number."**
+
+### Code and commit conventions
+
+- **Commit messages run 40+ lines on purpose.** They carry the reasoning a
+  summarised conversation loses. Lead with what would be most expensive to
+  rediscover — an off-by-one that shipped, a claim that did not survive audit.
+  Keep writing them that way. Use `git commit -F` on Windows.
+- Comments explain **why**, and name the citation or the decision they rest on.
+  Match the surrounding density — this codebase comments heavily by design.
+- Tests are written to **discriminate**. Where a test guards something expensive,
+  mutation-test it and record the result.
+- Design system is enforced mechanically: add a token to `DESIGN.md`, never reach
+  for an arbitrary value.
+- No emoji anywhere in the codebase — `tokens.test.ts` fails the build on one.
+
+---
+
+## 8. Dead ends & known traps
+
+### Real bugs that shipped and were caught — the expensive ones
+
+- **ESM-2 off-by-one (the most serious).** `_token_offset` returned the *index* of
+  the first residue and `score()` used it as an *additive offset*, so every
+  substitution was scored against its neighbour. The values were plausible and
+  correctly ordered. Caught only by recomputing masked marginals independently
+  from the same checkpoint: `A10W` came out −1.53 where the model actually says
+  −4.59. The fix is structural — the alignment is established by comparing tokens
+  against the sequence at several positions across its length, the helper returns
+  an index and is *named* one, and `score()` re-checks the residue it is about to
+  mask. `tests/test_esm.py` would fail on a return to the old formula.
+- **Mutation codes written in sequence index rather than the canonical scheme**
+  (`S108A` where the confirmed scheme says `S77A`). The single most expensive
+  error class in this application. Fixed by threading canonical labels through
+  enumeration.
+- **A duplicate-label dict comprehension** in the label→position map silently kept
+  the *last* duplicate. `domain/schemes.py:positions_by_label` now refuses
+  duplicates.
+- **The transport retry could re-POST a run-start and create two runs.** Fixed
+  with a service-level dedupe, migration 0003's partial unique index, `IntegrityError`
+  recovery, and 200-vs-201 status. `verify_gates.call()` now only retries GET
+  unless `retry_safe=True`.
+- **The two mock predictors were anti-correlated by construction**, so every
+  variant carried maximal disagreement. Fixed with a shared latent read in each
+  metric's own direction (`providers/mock.py`, `_SHARED_WEIGHT`).
+
+### Traps in the tests themselves
+
+- **A presence assertion is not a visibility assertion.** The first two-clicks
+  test checked presence; a mutation hiding the Trace control behind a closed
+  `<details>` — a genuine third click — passed it, because jsdom keeps closed
+  `<details>` contents in the tree. If you touch the inspector or the drawer,
+  **re-run the mutation check** rather than trusting a green tick.
+- **The word doing the work in that gate is "any".** A mutation pointing every
+  Trace control at the *first* score passed all six tests that existed. There is
+  now a two-predictor block that catches it.
+- **A correlation test cannot discriminate a radii set.** See §6. This is the
+  general form and it has bitten once already.
+
+### Environment dead ends
+
+- **Frame rate cannot be measured from an agent session, at all.** The browser
+  pane runs hidden, so nothing composites and `requestAnimationFrame` never fires
+  — which also means the virtualiser never recalculates, so a scroll cannot even
+  be simulated. Do not attempt it again. It needs a human with a real browser.
+- **Mol\* cannot be verified from the DOM.** It reports `ready` and the focus call
+  is wrapped so a failure cannot take the panel down, but everything it draws goes
+  to a canvas. Nothing about the *image* is verified.
+- **`verify_gates.py` crashed on a passing check** because cp1252 could not encode
+  `→`. It now reconfigures its own stdout/stderr to UTF-8 with `errors="replace"`.
+- **RQ job ids may not contain `:`.** They are `run-{uuid}`.
+- **TanStack Table v9 was installed and had to be pinned back to v8.**
+- **Mol\*'s entry point is `initViewerAsync`, not `initViewer`**, and focusing a
+  residue needs **author** numbering (`auth_seq_id`), not the sequence index.
+- **ThermoMPNN's config object needs a `__contains__` shim** (`'lightattn' in cfg.model`),
+  and its `forward` returns `(list_of_dicts, None)`, not tensors. Loading without
+  pytorch-lightning means stripping the `model.` prefix Lightning puts on keys.
+- **`P0CG48` is Polyubiquitin-C (685 aa), not the 76 aa ubiquitin monomer.**
+  Reconciliation correctly refused it with nine candidate offsets. Not a bug.
+
+### Workarounds currently in place
+
+Stuck `RUNNING` run — nothing reaps it, so recover manually:
 
 ```sql
 UPDATE run SET status='CANCELLED', error='abandoned' WHERE status='RUNNING';
 ```
 
-**NOT verified: ThermoMPNN's absolute accuracy.** Its position mapping and sign
-are checked; its ΔΔG values are not compared against any external benchmark,
-because none is vendored. It is a real model producing real numbers, not a
-validated one.
+### Fragile — touch carefully
 
-**The Phase 5 performance gate was rewritten by the owner** (2026-08-16) from
-"10,000 rows scroll at 60fps" to **constant work per scroll update**, evidenced by
-a DOM node count that does not grow with row count and a scroll height matching
-rows x row height. That property is now asserted in CI —
-`apps/web/test/virtualisation.test.tsx` renders 100 rows and 10,000 rows and
-requires the same number of mounted `<tr>`, flat total DOM nodes, and a scroll
-height accounting for every row. Disabling virtualisation fails all five.
+- `providers/esm.py::_residue_token_start` and the `index = start + position - 1`
+  arithmetic in `score()`.
+- `providers/thermompnn.py` position mapping — ThermoMPNN indexes by position
+  within the *parsed chain*, which is neither the sequence index nor the author
+  numbering. Every mutation is checked against the residue ThermoMPNN reports.
+- `domain/hashing.py` — floats are hashed via `repr`; non-finite values are
+  refused. An earlier over-strict version crashed on a legitimate goal value of
+  `65.0`.
+- `apps/web/test/two-clicks.test.tsx` — see the mutation traps above.
 
-Measured on a real 10,450-row ranking (firefly luciferase P08659, 550 residues):
+---
 
-| Measurement                        | Value                               |
-| ---------------------------------- | ----------------------------------- |
-| Ranked rows served                 | 10,450                              |
-| `<tr>` in the DOM                  | 32                                  |
-| DOM nodes, whole page              | 772 (0.074 per ranked row)          |
-| Scroll height                      | 313,660px vs 10,450 x 30px expected |
-| Synchronous scroll + forced layout | 0.8ms                               |
+## 9. Open threads
 
-**Frame rate is a manual check, and it has NOT been done.** It cannot be done from
-an agent session: the browser pane runs hidden, so nothing composites and
-`requestAnimationFrame` never fires — which also means the virtualiser never
-recalculates, so a scroll cannot even be simulated. Do not claim a frame rate in
-code comments, in docs, or in a commit message until the owner has run it.
+Ranked by priority.
 
-When it is run, record it here as user-verified with a date. The case the
-structural evidence does not cover, and the one to look at: **scrolling the table
-while Mol\* is mounted and holding a WebGL context.** That is the realistic worst
-case — the viewer is live in the inspector on every selected row.
+1. **Open scientific decisions — ask the owner, never decide.** Both still open:
+   - **Primer Tm algorithm and its parameters** — blocks the Phase 7 wet-lab
+     handoff. Cannot be started without it.
+   - **Fuzzy-join thresholds** matching bench measurements to variants — blocks
+     Phase 8.
+2. **The `JOB_TIMEOUT_SECONDS` conflict needs an owner decision.** 3600s is 93%
+   consumed by a 212-residue target; the seeded 550-residue luciferase would be
+   killed. Raising the cap is one option, making the scoring stage resumable is
+   the better one. **Do not edit the constant quietly.**
+3. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
+   interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give. It
+   reports `reports_interval=False` with the reason stated rather than dressing a
+   benchmark RMSE as a per-variant interval. Owner's call how to resolve.
+4. **Nobody has looked at a single screen.** `BRIEF.md` §4 is emphatic about how
+   this must look, and that judgement has never been made. Ask the owner to open
+   <http://localhost:3000> — this should happen well before Phase 9.
+5. **Frame rate is still unmeasured**, by design. When the owner runs it, record
+   it here as user-verified with a date. The case to look at is **scrolling the
+   table while Mol\* is mounted and holding a WebGL context** — the realistic
+   worst case, since the viewer is live on every selected row.
+6. **Two real predictors have never scored the same run.** The one real end-to-end
+   run used a structureless target, so ThermoMPNN skipped. The disagreement
+   column — the signal `BRIEF.md` §6 is built around — has never been observed
+   with real numbers. Needs a target that has a structure.
+7. **The containerised real-provider path is unverified.** Build the image with
+   `[models]` and run the opt-in gate section (`CATALYST_GATE_REAL_MODELS=1`).
+8. **`Variant.region` is dead weight** — populate it deliberately or drop it.
+9. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
+10. **Alignment identity-scoring was never re-confirmed** by the owner
+    (`ARCHITECTURE.md` §9).
+11. **The Claude goal parser has never run against the live API.** No
+    `ANTHROPIC_API_KEY` is configured, so every parse falls back to the rule
+    parser and is badged as such. Failure branches are covered hermetically
+    against a fake client. Do not describe it as working until it has been called.
+12. **A cold clone has never been tested.** `docker compose up` has only ever run
+    on a machine that already had images and a populated database.
 
-The gate's **other** half — "any score traces to a model version in two clicks" —
-*is* verified, literally. Counted in a real browser with trusted clicks (row,
-then Trace) for two different variants and both metrics, and locked by
-`test/two-clicks.test.tsx`, which asserts the model version is invisible at zero
-and one clicks and visible at two.
+---
 
-That test asserts **visibility**, not presence, and the difference is the point:
-the first version checked presence, and a deliberate mutation hiding the Trace
-control behind a closed disclosure — a genuine third click — passed it, because
-jsdom keeps the contents of a closed `<details>` in the tree. If you touch the
-inspector or the drawer, re-run the mutation check rather than trusting a green
-tick.
+## 10. Immediate next steps
 
-The word doing the work in that gate is **any**. The original fixture carried one
-metric, so "each score reaches its *own* model version" was verified in the
-browser but not guarded — a mutation pointing every Trace at the first score
-passed all six tests. There is now a two-predictor block that catches it, which is
-the ordinary case anyway: two predictors are what make the disagreement column
-mean anything.
+1. **Verify the gates before changing anything.** `docker compose up -d`, then
+   `python scripts/verify_gates.py` (117 checks). Also run the per-package gates
+   in §5. If anything is red, **stop and report** — do not proceed into Phase 7.
+2. **Ask the owner for the Phase 7 scientific decision and wait**: the primer Tm
+   algorithm and its parameters. Phase 7's wet-lab handoff cannot be built
+   without it, and it must not be invented. Raise open threads 2 and 3 in the
+   same message — they are owner decisions that have been waiting.
+3. **While waiting, do the unblocked Phase 7 work**: the design set builder
+   (`BRIEF.md` §5.7) — variant selection into a set, the combinatorial stacking
+   builder, the unmissable additivity/epistasis warning, and the 8 Å pair flag
+   (settled by the brief, not open). Running budget and cost estimate.
+4. **Build the export refusal early**: exports must refuse to emit primers while
+   any active provider is a mock (`BRIEF.md` §6). Specified and not built. It is
+   an honesty invariant, so it should exist before the export path does.
+5. **Then close the loop as the working agreement requires**: add a Phase 7
+   section to `scripts/verify_gates.py` asserting the exit gate, update §3 and §9
+   of this file in the same commit, run every gate, commit with a real message,
+   and stop and check in.
 
-**Mol\* has never been looked at.** It reports `ready` — WebGL initialised, the
-coordinates were fetched from our own API, parsed, and the default preset
-applied — and the residue-focus call is wrapped so a failure cannot take the
-panel down. But everything it draws goes to a canvas, so *nothing* about the
-image is verified: not that a structure is visible, not that the camera focused
-the right residue, not that it is legible against our surface colour. This is
-the one thing in the build that cannot be checked from the DOM.
+---
 
-**Nothing has been re-run after a structure changed underneath a target.** The
-content-address check that would catch it exists and is unit-tested; the live
-path has not been exercised.
+## 11. External references
 
-## 6. Decisions taken in conversation
+| Resource                          | URL / identifier                                              | Used for                                        |
+| --------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+| Repo remote                       | `https://github.com/vyom-aggarwal/catalyst-ai.git`            | `origin`, in sync with local `main` at `90e6f40` |
+| ThermoMPNN                        | `github.com/Kuhlman-Lab/ThermoMPNN` @ `2b04fd370e399911b1fa5848112cc9013f084110` | Vendored source + weights, MIT   |
+| ThermoMPNN paper                  | doi:10.1073/pnas.2314853121                                   | Dieckhaus et al. 2024, PNAS 121(6)              |
+| ESM-2 checkpoint                  | `facebook/esm2_t33_650M_UR50D` (HuggingFace)                  | Masked-marginal scoring                         |
+| MaxASA reference table            | doi:10.1371/journal.pone.0080635                              | Tien et al. 2013 *theoretical* values           |
+| ProtOr radii                      | Tsai et al. 1999                                              | The van der Waals set biotite is given          |
+| UniProt                           | `https://rest.uniprot.org/uniprotkb`                          | Sequence + annotation retrieval                 |
+| RCSB PDB                          | `https://files.rcsb.org/download`                             | Experimental structures                         |
+| AlphaFold DB                      | `https://alphafold.ebi.ac.uk/api/prediction`                  | Predicted structures                            |
+| Seeded targets                    | `P37957` (*B. subtilis* lipase A, 212 aa), `P08659` (firefly luciferase, 550 aa) | The two targets everything is measured on |
+| Test fixtures                     | `1CRN`, `1BTL` (TEM-1), crambin                               | SASA golden tables, ThermoMPNN smoke tests      |
 
-Not derivable from the code. These were agreed with the owner.
-
-- **Tooling and dependency choices are delegated to the assistant.** Pick them,
-  state the reason in one line, do not open a question. Scientific defaults are
-  the opposite — always escalate.
-- **Goal parsing is Claude with a deterministic fallback**, not a structured form
-  and not rules-only. The fallback is not a degraded mode: it is the offline path
-  and the test path, and it runs on any API failure or safety refusal.
-- **Parser model defaults to `claude-opus-5`**, overridable via
-  `CATALYST_PARSER_MODEL`. An earlier Sonnet 5 suggestion was withdrawn —
-  downgrading for cost is the owner's call, not the assistant's.
-- **UniProt constraint annotations are suggestions, never auto-applied**, and
-  every position is translated into the canonical numbering scheme first.
-- **3D constraint picking deferred to Phase 5** when Mol\* lands. Phase 3 ships
-  the linear sequence track only.
-- **Alignment uses identity scoring, not BLOSUM62.** This was an assistant
-  decision, flagged for the owner's review and **not yet re-confirmed**.
-  Rationale in `ARCHITECTURE.md` §9. Reversible.
-- **Proposed, not agreed:** doing Phase 8 before Phase 6. The scorecard works
-  against ProteinGym measurements and mock predictions, so the moat does not
-  depend on real models, and it keeps the GPU question open.
-- **A run scores the entire single-point space and narrows afterwards.** Every
-  substitution at every nameable position, then rank, then apply the budget the
-  user actually stated. Any pre-filter — only buried positions, only conservative
-  substitutions — would be a scientific choice made without asking.
-- **Consensus is a mean of normalised ranks, not of scores.** Averaging kcal/mol
-  with a log-likelihood ratio would produce a number that sorts and means
-  nothing. Assistant decision; the arithmetic is in `domain/aggregate.py` and is
-  reversible.
-- **The consensus is not stored.** It is not a model output and would need a
-  fabricated `ModelVersion` to become a `Score`. Aggregation, filtering and
-  ranking are recomputed from stored scores on every read.
-- **Solvent accessibility uses `biotite`, not an implementation of ours** — the
-  owner's call, and the reason is the radii set, not the effort. A DSSP-agreement
-  test alone would not have caught a radii swap: a uniform-radius model correlates
-  with DSSP at r=0.998 while moving 8 of TEM-1's 263 residues across a region
-  boundary. Two tests ship: agreement with published DSSP for the absolute values,
-  and a golden table to pin the radii set and the reference table.
-- **Mutant rotamers are not modelled, and the toggle was dropped.** `BRIEF.md`
-  §5.6 asks for a wild-type/mutant toggle in the viewer. Placing a mutant side
-  chain needs a packer this build does not have, and a toggle that redrew the
-  wild-type residue under a "mutant" label would fabricate structural data. The
-  panel states the limitation instead. **Not filed as "reversible"** — it is a
-  decision with a named path forward, recorded in `ARCHITECTURE.md` §12: a
-  backbone-dependent rotamer library (Dunbrack), most probable rotamer, labelled
-  as such, never energy-minimised. First thing to revisit when a packer lands.
-- **No validation claim rests on a rank or correlation statistic alone.**
-  `ARCHITECTURE.md` §13, now a standing rule. It came out of the DSSP work — a
-  correlation test cannot discriminate a systematic offset, because correlation is
-  invariant to the transform that produces the error. It binds Phase 6's agreement
-  column (labelled *agreement*, never *confidence*) and Phase 8's scorecard, which
-  must report a rank metric, an error metric (MAE, kcal/mol) and a bias term (mean
-  signed error) together, with the bias visually adjacent to the rank.
-- **Starting a run is idempotent on its content address.** Two identical POSTs
-  return one run and a `200` on the second. Enforced by a partial unique index
-  (migration 0003), not only by a service check, so a concurrent pair cannot both
-  insert. Failed and cancelled runs leave the index, so retrying after a genuine
-  failure starts fresh. `verify_gates.py` proves it; a direct SQL insert
-  bypassing the application is refused by the database.
-
-## 7. Open scientific decisions — ask, never decide
-
-Each changes the advice this product gives a bench scientist.
-
-| Decision                                                     | Blocks                  |
-| ------------------------------------------------------------ | ----------------------- |
-| Which objectives each **real** predictor may be offered for  | Phase 6                 |
-| Primer Tm algorithm and its parameters                       | Phase 7 wet-lab handoff |
-| Fuzzy-join thresholds matching bench measurements to variants | Phase 8 validation loop |
-
-**Settled in Phase 5** by the owner, and now encoded — see `ARCHITECTURE.md` §11:
-relative solvent accessibility is ASA / MaxASA using Tien et al. 2013 *theoretical*
-(doi:10.1371/journal.pone.0080635); Shrake-Rupley via `biotite` with probe 1.4 Å,
-1000 points, ProtOr radii, heavy atoms only; core RSA < 0.25, boundary 0.25–0.40,
-surface > 0.40, as a **project setting** with those defaults; distance to the
-active site is the minimum non-hydrogen atom separation to the residues the user
-annotated as catalytic or ligand-contacting, and nothing is inferred.
-
-On the second row: `Predictor.objectives` decides what the goal composer greys
-out. The mock's coverage was chosen so the whole interface is exercisable and is
-**not** a claim about any real model — `mock_fitness` currently claims seven
-objectives. Before Phase 6 the owner must state, per real predictor, which
-objectives it may be offered for. Inheriting the mock's list would have a
-stability model quietly answering a specificity question.
-
-`Variant.region` on the table is still null: burial is computed per run and stored
-in that run's `FEATURES_COMPUTED` provenance event, not on the variant row, because
-a variant is shared across runs and the cutoffs are not. The column on the table is
-now unused — Phase 6 should either populate it deliberately or drop it.
-
-Settled by the brief and **not** open: the ΔΔG sign convention (destabilizing
-positive, kcal/mol, always with an interval), the >90% MSA conservation
-high-risk flag, and the 8 Å epistasis pair-flag distance.
-
-## 8. What Phase 6 will need to know
-
-Phase 6 is real `ESMScorer` + `StabilityPredictor`. The seam is already there and
-the mock is the proof it fits.
-
-- **Implement the `Predictor` protocol in `providers/`** and register it in
-  `providers/registry.py`. Nothing under `apps/web/components` should change —
-  that is the test ARCHITECTURE.md §2 states, and it is worth actually running.
-- **`objectives` is the open decision** (§7). State it per predictor. Do not copy
-  the mock's list.
-- **`is_mock=False` turns the whole demo apparatus off by itself**: the amber bar,
-  the per-number asterisk, `is_demo` on the run and the ranking. There is no
-  second switch to remember, and `/meta` derives the flag from the predictors
-  rather than from `CATALYST_PROVIDERS`.
-- **A predictor that needs a GPU declares `needs_gpu`**, but nothing checks it
-  yet — `Capabilities.unmet` only tests structure, MSA and length. Add the check
-  when there is a real predictor that would fail without one.
-- **The MSA provider is the other half.** `build MSA` is a real stage that
-  currently always skips, and conservation is deliberately not rendered (it is in
-  the column menu, disabled, labelled "Requires MSA (Phase 6)"). Once an MSA
-  exists: enable that column, and add the >90% conservation high-risk flag, which
-  `BRIEF.md` §7 settles and which nothing currently implements.
-- **Scores are content-addressed and cached across runs** on
-  `hash(model_version + inputs)`. A real predictor gets that for free, which
-  matters much more when a scoring stage costs GPU-minutes rather than a second.
-  Bumping `version` or `weights_hash` correctly invalidates it.
-- **`Variant.features` is still an empty dict.** Geometry lives in the run's
-  `FEATURES_COMPUTED` provenance event, keyed by sequence position. Conservation
-  should follow the same pattern rather than being written onto the variant row:
-  a variant is shared across runs, an MSA is not.
-- **`GET /runs/{id}/ranking` omits `limit` at your peril** — it applies the run's
-  *budget*, not "everything". Pass `limit` for the whole ranking, and
-  `include_filtered=true` to get constraint-removed variants back with their
-  reasons. (An earlier version of this file said the opposite; it was wrong.)
-
-## 9. Machine quirks
-
-- **Postgres is on host port 5433**, not 5432 — another project's container
-  (`nexus-db-1`) holds 5432. Configurable via `POSTGRES_PORT` / `REDIS_PORT`.
-- **pnpm is a corepack shim** in `%APPDATA%\npm`. If missing:
-  `corepack enable --install-directory "$env:APPDATA\npm"`.
-- **Docker Desktop is under `%LOCALAPPDATA%\Programs\DockerDesktop`** and will
-  not start from a non-interactive process — a human must launch it.
-- **PowerShell 5.1 corrupts here-strings containing double quotes** when passing
-  them to native commands. Write long commit messages to a file and use
-  `git commit -F`.
-- **The web container needs `API_INTERNAL_URL`.** Server components run inside
-  the container, where `localhost` is the web container itself, not the API.
-- **Adding a web dependency needs the image rebuilt, not just restarted.**
-  `node_modules` lives in anonymous volumes that shadow the bind mount, so
-  installing on the host is invisible to the container. Use
-  `docker compose up -d --build --renew-anon-volumes web`.
-- **The Windows console is cp1252** and cannot encode `→` or `°`.
-  `verify_gates.py` reconfigures its own streams to UTF-8; anything else printing
-  those characters needs `PYTHONIOENCODING=utf-8`.
-- **The agent's browser pane runs hidden, so the page never composites.**
-  `requestAnimationFrame` does not fire, which means anything driven by animation
-  frames — virtualised scrolling, transitions, `screenshot` — cannot be observed
-  or measured from an agent session. Plain DOM reads, `fetch`, timers and
-  MutationObserver all work. Anything visual needs a human with a real browser.
-- **`docker compose rm -f web` does not drop the anonymous `node_modules`
-  volumes**, so a rebuilt image still starts with stale dependencies. Use
-  `docker compose rm -fsv web` (note the `v`) and then `up -d`.
-
-## 10. Working agreement
-
-- Build in the numbered phases from `BRIEF.md` §9. After each: typecheck, lint,
-  tests, fix everything red, commit with a real message.
-- **Stop and check in at the end of each phase. Do not silently continue.**
-- A smaller number of finished screens beats a full skeleton.
-- Ask before adding a dependency outside `BRIEF.md` §3. Ask before inventing any
-  scientific default.
-- Commit messages here run 40+ lines on purpose. They carry the reasoning a
-  summarised conversation loses. Keep writing them that way.
-- Update this file's §3 and §5 in the same commit that changes them.
+No dashboards, no ticketing system, no CI service — everything is local.
