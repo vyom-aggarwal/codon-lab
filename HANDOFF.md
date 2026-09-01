@@ -7,13 +7,11 @@ thing to read and the last thing to update.
 `main`; the wet-lab handoff is blocked and the blocker is named in §3 and §9.
 
 > **The product is called Codon Lab.** It was renamed from CatalystAI on
-> 2026-09-01. Two things still carry the old name and are *not* oversights:
-> the **GitHub repository** (`vyom-aggarwal/catalyst-ai`) and the **working
-> directory** (`catalyst-ai`), both of which are the owner's to rename — the
-> remote URL in §11 is left pointing at the name that currently resolves.
-> Renaming either is safe: nothing in the code reads the directory name, and
-> the compose project is pinned to `codon-lab` in `docker-compose.yml`.
-> The one string inside the code that keeps `catalyst` is documented in §8.
+> 2026-09-01 — the code, the packages, the environment variables, the Postgres
+> role and database, the GitHub repository, and the working directory. Exactly
+> one string inside the code still reads `catalyst`, deliberately: the hash salt
+> in `providers/mock.py`. §8 says why, and why finishing the rename there would
+> change every synthetic number the product has produced.
 
 Read these first, in this order. This file is the entry point and deliberately
 does **not** duplicate them.
@@ -590,23 +588,52 @@ built around.
 
 ### Machine facts discovered during the rename (2026-09-01)
 
+- **Renaming the project folder needs the old compose project's containers
+  removed first.** `docker-compose.yml` pins `name: codon-lab`, so
+  `docker compose down` does not touch containers created under the previous
+  project name — five `catalyst-ai-*` containers survived it, and their bind
+  mounts held the folder against a rename (`Device or resource busy`).
+  `docker rm` them by name, **without** `-v`, so `catalyst-ai_postgres-data`
+  survives as the pre-rename backup. An agent session also pins its own
+  working directory, so it has to move out before the folder can be renamed.
+
 - **Host port 5433 is no longer free.** Another project's container,
   `rihs-postgres`, holds it. This project moved to **5434** in the local `.env`.
   Nothing inside the compose network is affected — services still reach Postgres
   on 5432 by name — so only host tooling sees the change. Do not stop the other
   project's container to reclaim the port.
-- **`import torch` is blocked by a Windows Application Control policy.**
-  `OSError: [WinError 4551] ... Error loading "...torch/lib/shm.dll"`. The DLL is
-  present and unmodified since 2026-08-23; the policy is a machine-level setting
-  that changed underneath the project, and it is **not** a consequence of the
-  rename — `import torch` fails on its own, before any project code runs. One
-  test fails because of it: `test_providers.py::test_a_predictor_cannot_produce_a_score_row[esm2_t33_650m]`.
-  Resolving it means a change to Windows security settings, which is the owner's
-  to make. **Worth noting separately:** the failure also shows that `ESMScorer`
-  lets an `OSError` from a blocked runtime escape `score()` rather than reporting
-  itself unavailable through `PredictorUnavailableError`. That is a real
-  robustness gap in the provider, independent of this machine, and it is filed as
-  open thread 10.
+- **The `[models]` extra is NOT installed, so `import torch` fails.** The venv was
+  rebuilt from scratch on 2026-09-01 (see the restore note below) with `[dev]`
+  only. Reinstall it with `pip install -e "apps/api[dev,models]"` — several GB —
+  when a real predictor is actually needed.
+
+  Before that rebuild torch *was* installed and failed differently: a Windows
+  Application Control policy blocked its DLLs with
+  `OSError: [WinError 4551] ... Error loading "...torch/lib/shm.dll"`, on files
+  unmodified since 2026-08-23. That policy is a machine-level setting and will
+  bite again the moment `[models]` goes back in, so reinstalling torch is
+  necessary but **not sufficient** to get the real predictors running here.
+
+  Either way the same single test fails —
+  `test_providers.py::test_a_predictor_cannot_produce_a_score_row[esm2_t33_650m]`,
+  with `ModuleNotFoundError` now and `OSError` before. That it fails at all is
+  the interesting part: `ESMScorer.available()` reports the predictor as
+  available and then `score()` lets the raw exception escape, instead of
+  reporting itself unavailable through `PredictorUnavailableError`. A predictor
+  whose runtime is missing or unloadable should take the path the pipeline
+  already handles, in which case the test passes trivially and more strongly.
+  Filed as open thread 10; it is a real gap in the provider, not a property of
+  this machine.
+
+- **The working tree was deleted and restored from GitHub on 2026-09-01.**
+  Everything tracked came back at `d38af75`. What did not, because it is
+  git-ignored, was rebuilt by hand: `.env` (from `.env.example`, with
+  `POSTGRES_PORT=5434` and the parser model this machine had set),
+  `node_modules`, and `apps/api/.venv`. **The Docker volumes were untouched by
+  the deletion** — they live in Docker's own storage, not the project folder —
+  so `codon-lab_postgres-data` still holds the 4,028 real ESM-2 scores, and
+  `catalyst-ai_postgres-data` is still the pre-rename backup. Verified after the
+  restore: 162/162 gate checks.
 - **The Postgres role and database were renamed in place**, not recreated: the
   volume holds 4,028 real ESM-2 scores that cost ~56 minutes of CPU. Renaming a
   role does **not** carry its password across, which is the trap — the role
@@ -745,7 +772,7 @@ Ranked by priority.
 
 | Resource                          | URL / identifier                                              | Used for                                        |
 | --------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| Repo remote                       | `https://github.com/vyom-aggarwal/catalyst-ai.git`            | `origin`. Still carries the pre-rename name; local `main` is **ahead** and unpushed |
+| Repo remote                       | `https://github.com/vyom-aggarwal/codon-lab.git`              | `origin`. GitHub redirects the old `catalyst-ai` URL, so older clones still work |
 | ThermoMPNN                        | `github.com/Kuhlman-Lab/ThermoMPNN` @ `2b04fd370e399911b1fa5848112cc9013f084110` | Vendored source + weights, MIT   |
 | ThermoMPNN paper                  | doi:10.1073/pnas.2314853121                                   | Dieckhaus et al. 2024, PNAS 121(6)              |
 | ESM-2 checkpoint                  | `facebook/esm2_t33_650M_UR50D` (HuggingFace)                  | Masked-marginal scoring                         |
