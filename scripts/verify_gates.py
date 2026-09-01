@@ -35,9 +35,9 @@ BASE = "http://localhost:8000"
 WEB = "http://localhost:3000"
 
 #: The Phase 6 checks that load a real model are opt-in. The default gate loop
-#: runs against CATALYST_PROVIDERS=mock and stays fast; ESM-2 650M is 2.6 GB and
-#: one forward pass per position. Set CATALYST_GATE_REAL_MODELS=1 to include them.
-REAL_MODELS = os.environ.get("CATALYST_GATE_REAL_MODELS") == "1"
+#: runs against CODONLAB_PROVIDERS=mock and stays fast; ESM-2 650M is 2.6 GB and
+#: one forward pass per position. Set CODONLAB_GATE_REAL_MODELS=1 to include them.
+REAL_MODELS = os.environ.get("CODONLAB_GATE_REAL_MODELS") == "1"
 ACCESSION = "P37957"  # B. subtilis lipase A: a 31-residue signal peptide, so the
 # full-length and mature schemes genuinely disagree.
 
@@ -614,7 +614,7 @@ def main() -> int:
     real = [p for p in by_id.values() if not p["is_mock"]]
     mock = [p for p in by_id.values() if p["is_mock"]]
     step("the shipped default is the synthetic set", len(mock) >= 1 and not real,
-         "CATALYST_PROVIDERS=mock, so the gate loop stays fast")
+         "CODONLAB_PROVIDERS=mock, so the gate loop stays fast")
 
     section("Phase 6: every predictor states what it will and will not answer")
     support = meta["objective_support"]
@@ -629,7 +629,7 @@ def main() -> int:
 
     if REAL_MODELS:
         section("Phase 6: the real predictors load and produce scores")
-        # Opt-in. Needs CATALYST_PROVIDERS to include the real set on the API and
+        # Opt-in. Needs CODONLAB_PROVIDERS to include the real set on the API and
         # the worker, and the weights present where the worker can reach them.
         real_ids = [p["id"] for p in by_id.values() if not p["is_mock"]]
         step("a real predictor is configured", bool(real_ids), ", ".join(real_ids))
@@ -663,7 +663,7 @@ def main() -> int:
     else:
         section("Phase 6: real-model checks skipped")
         step("opt-in checks are available", True,
-             "set CATALYST_GATE_REAL_MODELS=1 (and CATALYST_PROVIDERS=real) to run them")
+             "set CODONLAB_GATE_REAL_MODELS=1 (and CODONLAB_PROVIDERS=real) to run them")
 
     # ----------------------------------------------------------------- Phase 7
 

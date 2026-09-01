@@ -3,7 +3,7 @@
 Hermetic by default. The real checkpoint is 2.6 GB and one forward pass is
 several seconds, so the tests that load it are opt-in:
 
-    CATALYST_TEST_REAL_MODELS=1 pytest tests/test_esm.py
+    CODONLAB_TEST_REAL_MODELS=1 pytest tests/test_esm.py
 
 The alignment tests below are the important ones, and they run without the model.
 They exist because a real off-by-one shipped in this file during development:
@@ -20,13 +20,13 @@ import uuid
 
 import pytest
 
-from catalyst.domain.goal import Objective
-from catalyst.providers.base import PredictorUnavailableError, TargetContext
-from catalyst.providers.esm import CHECKPOINT, ESM2_650M, MAX_RESIDUES, ESMScorer
+from codonlab.domain.goal import Objective
+from codonlab.providers.base import PredictorUnavailableError, TargetContext
+from codonlab.providers.esm import CHECKPOINT, ESM2_650M, MAX_RESIDUES, ESMScorer
 
-REAL = os.environ.get("CATALYST_TEST_REAL_MODELS") == "1"
+REAL = os.environ.get("CODONLAB_TEST_REAL_MODELS") == "1"
 requires_model = pytest.mark.skipif(
-    not REAL, reason="needs the 2.6 GB ESM-2 checkpoint; set CATALYST_TEST_REAL_MODELS=1"
+    not REAL, reason="needs the 2.6 GB ESM-2 checkpoint; set CODONLAB_TEST_REAL_MODELS=1"
 )
 
 
@@ -165,7 +165,7 @@ def test_it_is_offered_for_exactly_the_five_agreed_objectives() -> None:
 
 
 def test_it_did_not_inherit_the_mocks_objectives() -> None:
-    from catalyst.providers.mock import MOCK_FITNESS
+    from codonlab.providers.mock import MOCK_FITNESS
 
     assert ESM2_650M.objectives != MOCK_FITNESS.objectives
 
@@ -216,7 +216,7 @@ def test_scores_match_an_independent_masked_marginal_computation() -> None:
     import torch
     from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-    from catalyst.domain.variants import enumerate_single_substitutions
+    from codonlab.domain.variants import enumerate_single_substitutions
 
     sequence = "MKFVKRRIIALVTILMLSVTSLFALQPSAKAAEHNPVVMVHGIGG"
     labels: list[str | None] = [str(index + 1) for index in range(len(sequence))]

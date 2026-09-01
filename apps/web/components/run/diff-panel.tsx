@@ -1,4 +1,4 @@
-import type { RunDiff } from '@catalyst/schema'
+import type { RunDiff } from '@codonlab/schema'
 import type { Route } from 'next'
 import Link from 'next/link'
 

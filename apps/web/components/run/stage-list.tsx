@@ -1,4 +1,4 @@
-import type { RunStage, StageStatus } from '@catalyst/schema'
+import type { RunStage, StageStatus } from '@codonlab/schema'
 
 import { Badge, StatusDot, type BadgeTone } from '@/components/ui/badge'
 

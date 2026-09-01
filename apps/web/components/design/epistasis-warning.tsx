@@ -1,4 +1,4 @@
-import type { EpistasisWarning } from '@catalyst/schema'
+import type { EpistasisWarning } from '@codonlab/schema'
 import { AlertTriangle } from 'lucide-react'
 
 /**

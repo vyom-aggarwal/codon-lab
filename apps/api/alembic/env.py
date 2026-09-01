@@ -6,9 +6,9 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 # Importing the models package registers every table on SQLModel.metadata.
-import catalyst.models  # noqa: F401
+import codonlab.models  # noqa: F401
 from alembic import context
-from catalyst.config import get_settings
+from codonlab.config import get_settings
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

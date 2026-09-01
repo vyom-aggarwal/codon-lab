@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.goal import EXPECTATIONS, GoalSpec, Objective, ParseMethod, restate
-from catalyst.parsers import rules
+from codonlab.domain.goal import EXPECTATIONS, GoalSpec, Objective, ParseMethod, restate
+from codonlab.parsers import rules
 
 
 class TestObjective:

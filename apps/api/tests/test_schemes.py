@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.schemes import (
+from codonlab.domain.schemes import (
     FocusResolution,
     SchemeResolutionError,
     author_label_at,
@@ -196,7 +196,7 @@ def test_the_feature_calculation_refuses_a_duplicated_scheme() -> None:
     names two residues alike stops the run instead of mislabelling a column."""
     from pathlib import Path
 
-    from catalyst.features.structure import StructureFeatureError, compute
+    from codonlab.features.structure import StructureFeatureError, compute
 
     fixture = Path(__file__).parent / "fixtures" / "1crn.pdb"
     labels: list[str | None] = ["1"] * 46  # every residue labelled the same

@@ -1,6 +1,6 @@
 'use client'
 
-import type { RankedVariant, Ranking, Run, ScoreCell } from '@catalyst/schema'
+import type { RankedVariant, Ranking, Run, ScoreCell } from '@codonlab/schema'
 import dynamic from 'next/dynamic'
 
 import { DemoMark } from '@/components/run/demo-mark'

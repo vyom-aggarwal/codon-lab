@@ -106,7 +106,7 @@ export type ProjectRow = z.infer<typeof projectRowSchema>
 
 export const projectListSchema = z.array(projectRowSchema)
 
-/** Numbering scheme kinds, mirroring `catalyst.models.enums.NumberingKind`. */
+/** Numbering scheme kinds, mirroring `codonlab.models.enums.NumberingKind`. */
 export const numberingKindSchema = z.enum(['sequence', 'pdb_author', 'construct'])
 export type NumberingKind = z.infer<typeof numberingKindSchema>
 

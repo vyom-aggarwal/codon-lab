@@ -16,4 +16,4 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -e .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "catalyst.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "codonlab.main:app", "--host", "0.0.0.0", "--port", "8000"]

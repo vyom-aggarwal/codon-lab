@@ -1,6 +1,6 @@
 'use client'
 
-import type { RankedVariant, Ranking } from '@catalyst/schema'
+import type { RankedVariant, Ranking } from '@codonlab/schema'
 import {
   createColumnHelper,
   flexRender,

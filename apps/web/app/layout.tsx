@@ -23,7 +23,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'CatalystAI',
+  title: 'Codon Lab',
   description: 'Protein design copilot for wet-lab scientists.',
 }
 

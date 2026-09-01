@@ -9,7 +9,7 @@ rather than something plausible.
 
 from __future__ import annotations
 
-from catalyst.domain.variants import (
+from codonlab.domain.variants import (
     SUBSTITUTIONS,
     enumerate_single_substitutions,
     hgvs_of,

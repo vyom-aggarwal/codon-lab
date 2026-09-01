@@ -7,7 +7,7 @@ is uncertain must surface as a question, never as a best guess.
 
 from __future__ import annotations
 
-from catalyst.domain.numbering import (
+from codonlab.domain.numbering import (
     ObservedResidue,
     ReconcileMethod,
     ReconcileOutcome,

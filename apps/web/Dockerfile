@@ -21,4 +21,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["pnpm", "--filter", "@catalyst/web", "dev"]
+CMD ["pnpm", "--filter", "@codonlab/web", "dev"]

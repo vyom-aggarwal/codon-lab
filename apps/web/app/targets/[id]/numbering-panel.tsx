@@ -1,6 +1,6 @@
 'use client'
 
-import type { NumberingScheme, Reconciliation, Structure } from '@catalyst/schema'
+import type { NumberingScheme, Reconciliation, Structure } from '@codonlab/schema'
 import { Check, Download } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'

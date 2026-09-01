@@ -1,5 +1,5 @@
 {
-  "name": "@catalyst/schema",
+  "name": "@codonlab/schema",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no tests in @catalyst/schema\" && exit 0",
+    "test": "echo \"no tests in @codonlab/schema\" && exit 0",
     "lint": "echo \"linted via typecheck\" && exit 0"
   },
   "dependencies": {

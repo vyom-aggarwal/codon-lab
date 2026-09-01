@@ -23,8 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from catalyst.domain.epistasis import PAIR_PROXIMITY_ANGSTROM
-from catalyst.features.structure import StructureFeatureError, pairwise_min_distances
+from codonlab.domain.epistasis import PAIR_PROXIMITY_ANGSTROM
+from codonlab.features.structure import StructureFeatureError, pairwise_min_distances
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CRAMBIN = (FIXTURES / "1crn.pdb").read_text()

@@ -1,4 +1,4 @@
-import type { Run, RunStatus } from '@catalyst/schema'
+import type { Run, RunStatus } from '@codonlab/schema'
 import type { Route } from 'next'
 import Link from 'next/link'
 

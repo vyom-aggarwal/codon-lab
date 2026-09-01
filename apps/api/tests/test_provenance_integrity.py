@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from sqlmodel import SQLModel
 
-import catalyst.models  # noqa: F401  (registers tables on SQLModel.metadata)
+import codonlab.models  # noqa: F401  (registers tables on SQLModel.metadata)
 
 
 def _table(name: str):

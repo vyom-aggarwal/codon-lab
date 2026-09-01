@@ -1,5 +1,5 @@
 import type { Route } from 'next'
-import type { ProjectRow } from '@catalyst/schema'
+import type { ProjectRow } from '@codonlab/schema'
 import Link from 'next/link'
 
 import { NewProjectDialog } from './new-project-dialog'

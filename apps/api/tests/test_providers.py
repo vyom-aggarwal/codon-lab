@@ -11,9 +11,9 @@ import uuid
 
 import pytest
 
-from catalyst.domain.goal import Objective
-from catalyst.domain.variants import enumerate_single_substitutions
-from catalyst.providers import (
+from codonlab.domain.goal import Objective
+from codonlab.domain.variants import enumerate_single_substitutions
+from codonlab.providers import (
     Capabilities,
     Predictor,
     StructureRef,
@@ -21,8 +21,8 @@ from catalyst.providers import (
     describe,
     resolve,
 )
-from catalyst.providers.mock import MOCK_FITNESS, MOCK_STABILITY
-from catalyst.providers.registry import REGISTRY
+from codonlab.providers.mock import MOCK_FITNESS, MOCK_STABILITY
+from codonlab.providers.registry import REGISTRY
 
 SEQUENCE = "MKFVAILGCDWTYSPNQREH"
 
@@ -83,7 +83,7 @@ def test_a_predictor_cannot_produce_a_score_row(predictor: Predictor) -> None:
     strongly — it produced nothing at all, which is what an unavailable predictor
     must do.
     """
-    from catalyst.providers.base import PredictorUnavailableError
+    from codonlab.providers.base import PredictorUnavailableError
 
     try:
         values = predictor.score(candidates()[:3], context())
@@ -210,7 +210,7 @@ def test_the_two_mocks_mostly_agree_and_sometimes_do_not() -> None:
     one where they never do. Both are checked, because an earlier version of the
     generator was anti-correlated by construction and neither the run nor the
     tests would have noticed."""
-    from catalyst.domain.aggregate import Series, aggregate
+    from codonlab.domain.aggregate import Series, aggregate
 
     ctx = context()
     stability = {v.variant_code: v.value for v in MOCK_STABILITY.score(candidates(), ctx)}

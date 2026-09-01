@@ -20,7 +20,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@catalyst/schema':
+      '@codonlab/schema':
         specifier: workspace:*
         version: link:../../packages/schema
       '@radix-ui/react-dialog':

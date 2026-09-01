@@ -1,6 +1,6 @@
 'use client'
 
-import type { Additive, DesignMember, DesignSet, PairFlag } from '@catalyst/schema'
+import type { Additive, DesignMember, DesignSet, PairFlag } from '@codonlab/schema'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'

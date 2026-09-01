@@ -1,4 +1,4 @@
-# CatalystAI — architecture
+# Codon Lab — architecture
 
 Module boundaries. **If you deviate, update this file in the same commit.**
 
@@ -7,7 +7,7 @@ Module boundaries. **If you deviate, update this file in the same commit.**
 ## 1. Workspace layout
 
 ```
-catalyst-ai/
+codon-lab/
 ├── apps/
 │   ├── web/         Next.js 15 App Router, React 19, TypeScript strict
 │   └── api/         FastAPI, Python 3.12, Pydantic v2, SQLModel
@@ -137,7 +137,7 @@ Implementations: `ESMScorer` (masked-marginal log-odds), `StabilityPredictor`
 `MSAProvider`, `GenerativeProvider` (ProteinMPNN / RFdiffusion — for scaffold and binder
 tasks, **not** presented as a point-mutation oracle). As of Phase 6 the registry holds
 `ESMScorer` (ESM-2 650M, masked marginals), `ThermoMPNN` (vendored, §14.3) and
-`MockProvider` as two synthetic predictors. `CATALYST_PROVIDERS` selects between them;
+`MockProvider` as two synthetic predictors. `CODONLAB_PROVIDERS` selects between them;
 `mock` and `real` are the two shorthands.
 
 **Every provider declares what it cannot do, twice over.** `available()` asks whether the
@@ -153,7 +153,7 @@ reason a predictor cannot run here, or `None`. The pipeline skips it with that r
 which travels to the cell and is shown on hover. The UI greys out objectives that no
 available provider supports, rather than running them and returning something worthless.
 
-**Which predictors are active is derived, not configured twice.** `CATALYST_PROVIDERS`
+**Which predictors are active is derived, not configured twice.** `CODONLAB_PROVIDERS`
 names ids; `services/providers` resolves them and answers *demo mode* from
 `Predictor.is_mock`, not from the string `mock` appearing in an environment variable.
 Those two answers agree today and would drift the first time a provider was renamed —
@@ -231,7 +231,7 @@ Redis + RQ. Jobs are **idempotent**. Results are content-addressed and cached on
 what that parameter affects, and the run diff in the run view is exact rather than
 inferred.
 
-- `catalyst/queue.py` holds the client, beside `db.py` rather than inside `workers/`.
+- `codonlab/queue.py` holds the client, beside `db.py` rather than inside `workers/`.
   Both the API (which enqueues) and the worker (which consumes) need it, and a route
   importing an entry point is the one direction §3 does not allow. The job is referenced
   by dotted path, so the API process never imports the worker module and cannot acquire
@@ -850,7 +850,7 @@ and being handed the next is how a user concludes a feature is broken.
 ### Why primers are refused today
 
 1. **Any provider in the run fabricates.** Read from the stored `ModelVersion.is_mock`
-   rows of the run the set belongs to, never from `CATALYST_PROVIDERS`, so a run
+   rows of the run the set belongs to, never from `CODONLAB_PROVIDERS`, so a run
    recorded months ago still reports what actually produced it (§4). A synthetic
    ΔΔG is recognisable as synthetic on screen because it is badged; an oligo
    ordered off the back of one is not recognisable as anything.

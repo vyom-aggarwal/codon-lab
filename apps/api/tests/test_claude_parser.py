@@ -19,8 +19,8 @@ import anthropic
 import httpx
 import pytest
 
-from catalyst.domain.goal import Objective, ParseMethod
-from catalyst.parsers import claude, parse
+from codonlab.domain.goal import Objective, ParseMethod
+from codonlab.parsers import claude, parse
 
 
 def block(text: str) -> SimpleNamespace:

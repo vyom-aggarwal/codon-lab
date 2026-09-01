@@ -1,4 +1,4 @@
-import type { Ranking, Run } from '@catalyst/schema'
+import type { Ranking, Run } from '@codonlab/schema'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { ToastProvider } from '@/components/ui/toast'

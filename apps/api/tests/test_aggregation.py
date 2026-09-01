@@ -7,7 +7,7 @@ and reporting agreement where there is only one opinion.
 
 from __future__ import annotations
 
-from catalyst.domain.aggregate import Series, aggregate, normalised_ranks, top
+from codonlab.domain.aggregate import Series, aggregate, normalised_ranks, top
 
 
 def test_best_value_ranks_one_when_higher_is_better() -> None:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.costing import (
+from codonlab.domain.costing import (
     CostBasis,
     CostError,
     estimate_fragments,

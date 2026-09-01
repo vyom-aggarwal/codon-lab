@@ -1,6 +1,6 @@
 'use client'
 
-import type { Meta, Run, RunStatus } from '@catalyst/schema'
+import type { Meta, Run, RunStatus } from '@codonlab/schema'
 import { useQuery } from '@tanstack/react-query'
 import type { Route } from 'next'
 import Link from 'next/link'

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.mutation import (
+from codonlab.domain.mutation import (
     Mutation,
     MutationParseError,
     format_mutation_set,

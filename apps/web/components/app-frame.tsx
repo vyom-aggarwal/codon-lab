@@ -21,7 +21,7 @@ export function AppFrame({ demoMode, children }: { demoMode: boolean; children: 
         >
           <div className="border-border flex h-12 items-center gap-2 border-b px-4">
             <FlaskConical className="text-accent size-4" strokeWidth={1.5} />
-            <span className="text-13 font-strong">CatalystAI</span>
+            <span className="text-13 font-strong">Codon Lab</span>
           </div>
           <ul className="p-2">
             <li>

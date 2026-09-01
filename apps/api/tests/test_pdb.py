@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.numbering import reconcile
-from catalyst.sources.pdb import ParsedStructure, StructureParseError, parse_pdb, parse_seqres
+from codonlab.domain.numbering import reconcile
+from codonlab.sources.pdb import ParsedStructure, StructureParseError, parse_pdb, parse_seqres
 
 
 def atom(

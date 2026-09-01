@@ -1,4 +1,4 @@
-import type { Filtered } from '@catalyst/schema'
+import type { Filtered } from '@codonlab/schema'
 
 import { Badge } from '@/components/ui/badge'
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from catalyst.sources import structures, uniprot
+from codonlab.sources import structures, uniprot
 
 
 def client_returning(*responses: httpx.Response) -> httpx.Client:

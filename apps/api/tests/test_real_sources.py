@@ -11,9 +11,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from catalyst.domain.numbering import ReconcileOutcome, align, contiguous_runs, reconcile
-from catalyst.sources import structures, uniprot
-from catalyst.sources.pdb import parse_pdb
+from codonlab.domain.numbering import ReconcileOutcome, align, contiguous_runs, reconcile
+from codonlab.sources import structures, uniprot
+from codonlab.sources.pdb import parse_pdb
 
 
 def _online() -> bool:

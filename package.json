@@ -1,5 +1,5 @@
 {
-  "name": "catalyst-ai",
+  "name": "codon-lab",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -7,8 +7,8 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "dev": "pnpm --filter @catalyst/web dev",
-    "build": "pnpm --recursive --filter './packages/**' build && pnpm --filter @catalyst/web build",
+    "dev": "pnpm --filter @codonlab/web dev",
+    "build": "pnpm --recursive --filter './packages/**' build && pnpm --filter @codonlab/web build",
     "typecheck": "pnpm --recursive typecheck",
     "lint": "pnpm --recursive lint",
     "test": "pnpm --recursive test",

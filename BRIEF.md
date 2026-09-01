@@ -1,4 +1,4 @@
-# CatalystAI — the brief
+# Codon Lab — the brief
 
 **This is the product specification as written by the project owner, reproduced
 verbatim. It is the source of truth for what this is and why.**
@@ -38,7 +38,7 @@ repos with CUDA requirements, not tools. So they either don't use them, or they
 get a one-off notebook from a computational colleague, run it once, and never
 trust the output enough to spend $4,000 of ordering budget on it.
 
-CatalystAI turns a plain-language engineering goal into a ranked, defensible
+Codon Lab turns a plain-language engineering goal into a ranked, defensible
 list of specific mutations, and then closes the loop with what actually happened
 at the bench.
 

@@ -136,7 +136,7 @@ export const useWorkbench = create<WorkbenchState>()(
       },
     }),
     {
-      name: 'catalyst.workbench',
+      name: 'codonlab.workbench',
       // Selection is per-run and meaningless on the next one; sizes and column
       // choices are the user's setup and outlive it.
       partialize: (state) => ({

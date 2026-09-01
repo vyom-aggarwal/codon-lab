@@ -1,6 +1,6 @@
 'use client'
 
-import type { Ranking } from '@catalyst/schema'
+import type { Ranking } from '@codonlab/schema'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

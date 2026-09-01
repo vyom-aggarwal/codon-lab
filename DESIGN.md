@@ -1,4 +1,4 @@
-# CatalystAI — design system
+# Codon Lab — design system
 
 This file is the source of truth for every colour, type size, space, radius, shadow and
 easing in the product. `apps/web/app/tokens.css` is a literal transcription of §1 below.

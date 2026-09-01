@@ -1,4 +1,4 @@
-import type { RankedVariant } from '@catalyst/schema'
+import type { RankedVariant } from '@codonlab/schema'
 
 import type { Filters, RegionFilter } from './workbench-store'
 

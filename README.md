@@ -1,4 +1,4 @@
-# CatalystAI
+# Codon Lab
 
 Turns a plain-language protein engineering goal into a ranked, defensible list of
 specific mutations — and refuses to guess when it does not know.
@@ -94,7 +94,7 @@ UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few 
 
 ### Running the real models
 
-The default is `CATALYST_PROVIDERS=mock`, so out of the box every number is synthetic and
+The default is `CODONLAB_PROVIDERS=mock`, so out of the box every number is synthetic and
 marked as such. Real predictors are opt-in because PyTorch plus the ESM-2 checkpoint is
 several gigabytes:
 
@@ -102,7 +102,7 @@ several gigabytes:
 cd apps/api && pip install -e ".[models]"
 ```
 
-Then set `CATALYST_PROVIDERS=real`. A predictor whose runtime or weights are missing
+Then set `CODONLAB_PROVIDERS=real`. A predictor whose runtime or weights are missing
 reports itself unavailable **with the reason**, and the objectives it covered grey out
 carrying that same sentence — it does not fall back, and it does not fail silently.
 
@@ -325,7 +325,7 @@ the boundary a future caller actually crosses.
 ```bash
 pnpm typecheck && pnpm lint && pnpm test          # 127 vitest, 8 files
 cd apps/api && .venv/Scripts/python -m pytest -q  # 336 pytest, 6 skipped (opt-in)
-cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy catalyst   # strict
+cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy codonlab   # strict
 python scripts/verify_gates.py                    # 162 checks, live stack
 ```
 
@@ -364,7 +364,7 @@ the point.
   every parse falls back to the deterministic rule parser and is badged as such. The failure
   branches are covered hermetically against a fake client.
 - **The containerised real-provider path.** The images do not carry `[models]`, so
-  `CATALYST_PROVIDERS=real` has never run inside Docker. Both providers were exercised on
+  `CODONLAB_PROVIDERS=real` has never run inside Docker. Both providers were exercised on
   the host venv against the same Postgres, and a full six-stage run completed there.
 - **ThermoMPNN's absolute accuracy.** Its position mapping and sign convention are checked;
   its values are compared against no external benchmark.
@@ -429,7 +429,7 @@ apps/web           6,623 lines + 1,774 lines of tests
 packages/schema      555 lines — the Zod contract shared by both
 scripts/          verify_gates.py — the phase gates, over HTTP
 
-apps/api/catalyst/providers/_vendor/thermompnn
+apps/api/codonlab/providers/_vendor/thermompnn
                    1,769 lines, MIT, pinned to one commit, provenance in every
                    file header. Counted separately because it is not ours.
 ```

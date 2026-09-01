@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from catalyst.seed import SEED_PROJECTS
+from codonlab.seed import SEED_PROJECTS
 
 # Any residue-level claim or measured quantity in seed metadata would be fabricated,
 # since Phase 1 has no provider and no bench data.

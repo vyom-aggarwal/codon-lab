@@ -1,6 +1,6 @@
 'use client'
 
-import type { Ranking, Run, ScoreCell } from '@catalyst/schema'
+import type { Ranking, Run, ScoreCell } from '@codonlab/schema'
 import { useQuery } from '@tanstack/react-query'
 import { Columns3 } from 'lucide-react'
 import type { Route } from 'next'

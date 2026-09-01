@@ -39,10 +39,10 @@ import {
   type StackResult,
   type Suggestion,
   type Target,
-} from '@catalyst/schema'
+} from '@codonlab/schema'
 
 /**
- * Structural, so the web app depends on @catalyst/schema and not on zod itself.
+ * Structural, so the web app depends on @codonlab/schema and not on zod itself.
  * The validation library is an implementation detail of the schema package.
  */
 interface Parser<T> {

@@ -3,8 +3,17 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-**Status current as of 2026-08-25.** Phase 7's design set builder is committed on
+**Status current as of 2026-09-01.** Phase 7's design set builder is committed on
 `main`; the wet-lab handoff is blocked and the blocker is named in §3 and §9.
+
+> **The product is called Codon Lab.** It was renamed from CatalystAI on
+> 2026-09-01. Two things still carry the old name and are *not* oversights:
+> the **GitHub repository** (`vyom-aggarwal/catalyst-ai`) and the **working
+> directory** (`catalyst-ai`), both of which are the owner's to rename — the
+> remote URL in §11 is left pointing at the name that currently resolves.
+> Renaming either is safe: nothing in the code reads the directory name, and
+> the compose project is pinned to `codon-lab` in `docker-compose.yml`.
+> The one string inside the code that keeps `catalyst` is documented in §8.
 
 Read these first, in this order. This file is the entry point and deliberately
 does **not** duplicate them.
@@ -24,7 +33,7 @@ the code wins and this file needs fixing.
 
 ## 1. Orientation
 
-**CatalystAI** is a protein-engineering copilot. A wet-lab scientist types a goal
+**Codon Lab** is a protein-engineering copilot. A wet-lab scientist types a goal
 in plain English — "make this lipase survive 65 °C in 30% DMSO" — and the app
 returns a ranked, defensible list of specific point mutations, each traceable to
 the model, version and weights hash that produced it. The audience is a bench
@@ -244,26 +253,26 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 
 | Path                                              | Role                                     | Why it matters                                                                                     |
 | ------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `apps/api/catalyst/providers/base.py`             | The `Predictor` Protocol                 | The single seam. `ScoreValue` carries no run/model — structurally incapable of an untraceable number |
-| `apps/api/catalyst/services/runs.py`              | The six-stage pipeline (~1500 lines)     | Every run flows through it; the only place a `Score` is created                                      |
-| `apps/api/catalyst/services/goals.py:162`         | `require_confirmed`                      | Invariant 1. In the service layer because workers are a second caller                                |
-| `apps/api/catalyst/models/run.py:118`             | `Score` table                            | Invariant 2. `model_version_id` and `run_id` both `nullable=False`; no migration may relax it        |
-| `apps/api/catalyst/providers/mock.py`             | The two synthetic predictors             | The **only** module permitted to invent a number. `is_mock` drives the whole demo apparatus          |
-| `apps/api/catalyst/providers/esm.py`              | ESM-2 650M, masked marginals             | Holds `_residue_token_start` — the off-by-one that shipped and was caught. Touch with care           |
-| `apps/api/catalyst/providers/thermompnn.py`       | ThermoMPNN ΔΔG                           | Vendored at a pinned SHA; hashes both its own and ProteinMPNN's weights                              |
-| `apps/api/catalyst/domain/numbering.py`           | Scheme reconciliation                    | `reconcile()` returns `NEEDS_ALIGNMENT` and stops. Never infers silently                             |
-| `apps/api/catalyst/domain/schemes.py`             | sequence index ↔ author numbering        | Pure functions so numbering is testable headlessly. `positions_by_label` refuses duplicate labels    |
-| `apps/api/catalyst/domain/aggregate.py`           | Rank-based consensus                     | Never averages raw scores. Null (not zero) disagreement for a single opinion                         |
-| `apps/api/catalyst/domain/hashing.py`             | `content_hash`                           | Content addressing and run idempotency both rest on it                                               |
-| `apps/api/catalyst/features/structure.py`         | SASA / RSA / burial via biotite          | Every pinned parameter and its citation live here                                                    |
-| `apps/api/catalyst/domain/constants/max_asa.py`   | Tien et al. 2013 theoretical MaxASA      | The reference table, with DOI. Swapping it moves 27 of 1BTL's 263 residues                           |
+| `apps/api/codonlab/providers/base.py`             | The `Predictor` Protocol                 | The single seam. `ScoreValue` carries no run/model — structurally incapable of an untraceable number |
+| `apps/api/codonlab/services/runs.py`              | The six-stage pipeline (~1500 lines)     | Every run flows through it; the only place a `Score` is created                                      |
+| `apps/api/codonlab/services/goals.py:162`         | `require_confirmed`                      | Invariant 1. In the service layer because workers are a second caller                                |
+| `apps/api/codonlab/models/run.py:118`             | `Score` table                            | Invariant 2. `model_version_id` and `run_id` both `nullable=False`; no migration may relax it        |
+| `apps/api/codonlab/providers/mock.py`             | The two synthetic predictors             | The **only** module permitted to invent a number. `is_mock` drives the whole demo apparatus          |
+| `apps/api/codonlab/providers/esm.py`              | ESM-2 650M, masked marginals             | Holds `_residue_token_start` — the off-by-one that shipped and was caught. Touch with care           |
+| `apps/api/codonlab/providers/thermompnn.py`       | ThermoMPNN ΔΔG                           | Vendored at a pinned SHA; hashes both its own and ProteinMPNN's weights                              |
+| `apps/api/codonlab/domain/numbering.py`           | Scheme reconciliation                    | `reconcile()` returns `NEEDS_ALIGNMENT` and stops. Never infers silently                             |
+| `apps/api/codonlab/domain/schemes.py`             | sequence index ↔ author numbering        | Pure functions so numbering is testable headlessly. `positions_by_label` refuses duplicate labels    |
+| `apps/api/codonlab/domain/aggregate.py`           | Rank-based consensus                     | Never averages raw scores. Null (not zero) disagreement for a single opinion                         |
+| `apps/api/codonlab/domain/hashing.py`             | `content_hash`                           | Content addressing and run idempotency both rest on it                                               |
+| `apps/api/codonlab/features/structure.py`         | SASA / RSA / burial via biotite          | Every pinned parameter and its citation live here                                                    |
+| `apps/api/codonlab/domain/constants/max_asa.py`   | Tien et al. 2013 theoretical MaxASA      | The reference table, with DOI. Swapping it moves 27 of 1BTL's 263 residues                           |
 | `apps/web/app/runs/[id]/workbench/workbench.tsx`  | The main screen                          | Assembles filter rail, table, inspector. Holds the stale conservation label at line 51               |
 | `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
 | `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
 | `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
 | `scripts/verify_gates.py`                         | 162 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
-| `apps/api/catalyst/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
-| `apps/api/catalyst/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
+| `apps/api/codonlab/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
+| `apps/api/codonlab/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
 
 ---
 
@@ -287,7 +296,7 @@ docker compose up -d
 ```
 
 `docker compose up` runs, in the `api` container:
-`alembic upgrade head && python -m catalyst.seed && uvicorn catalyst.main:app --host 0.0.0.0 --port 8000 --reload`
+`alembic upgrade head && python -m codonlab.seed && uvicorn codonlab.main:app --host 0.0.0.0 --port 8000 --reload`
 
 Then open <http://localhost:3000>.
 
@@ -295,25 +304,25 @@ Then open <http://localhost:3000>.
 
 | Service  | Image / command                    | Host port                | Notes                                    |
 | -------- | ---------------------------------- | ------------------------ | ---------------------------------------- |
-| postgres | `postgres:17-alpine`               | **5433** (`POSTGRES_PORT`) | 5432 is taken by another project on this machine |
+| postgres | `postgres:17-alpine`               | **5434** (`POSTGRES_PORT`) | 5432 *and* 5433 are taken by other projects on this machine — see §8 |
 | redis    | `redis:7-alpine`                   | 6379 (`REDIS_PORT`)      |                                          |
 | api      | FastAPI / uvicorn                  | 8000                     | Migrates + seeds on boot                 |
-| worker   | `python -m catalyst.workers.worker`| —                        | Without it, runs stay queued forever     |
-| web      | `pnpm --filter @catalyst/web dev`  | 3000                     |                                          |
+| worker   | `python -m codonlab.workers.worker`| —                        | Without it, runs stay queued forever     |
+| web      | `pnpm --filter @codonlab/web dev`  | 3000                     |                                          |
 
 ### Environment variable **names** (values never recorded here)
 
 From `.env.example`: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`,
 `POSTGRES_PORT`, `DATABASE_URL`, `REDIS_URL`, `CORS_ORIGINS`,
-`CATALYST_PROVIDERS`, `ANTHROPIC_API_KEY`, `CATALYST_PARSER_MODEL`,
+`CODONLAB_PROVIDERS`, `ANTHROPIC_API_KEY`, `CODONLAB_PARSER_MODEL`,
 `NEXT_PUBLIC_API_URL`.
 
 Set in `docker-compose.yml` but **absent from `.env.example`** — worth knowing:
 `API_INTERNAL_URL` (`http://api:8000`, required by web server components) and
-`REDIS_PORT`. Opt-in flags used only by tests and gates: `CATALYST_TEST_REAL_MODELS=1`,
-`CATALYST_GATE_REAL_MODELS=1`.
+`REDIS_PORT`. Opt-in flags used only by tests and gates: `CODONLAB_TEST_REAL_MODELS=1`,
+`CODONLAB_GATE_REAL_MODELS=1`.
 
-`CATALYST_PROVIDERS` defaults to `mock`. `real` switches on ESM-2 650M and
+`CODONLAB_PROVIDERS` defaults to `mock`. `real` switches on ESM-2 650M and
 ThermoMPNN and requires the optional extra.
 
 ### Running the real models
@@ -321,7 +330,7 @@ ThermoMPNN and requires the optional extra.
 ```powershell
 cd apps\api
 pip install -e ".[models]"       # torch + transformers, several GB
-# then set CATALYST_PROVIDERS=real
+# then set CODONLAB_PROVIDERS=real
 ```
 
 ### Tests and gates
@@ -330,7 +339,7 @@ pip install -e ".[models]"       # torch + transformers, several GB
 pnpm typecheck; pnpm lint; pnpm test              # 127 vitest across 8 files
 cd apps\api; .venv\Scripts\python -m pytest -q    # 336 pytest, 6 skipped (opt-in real-model)
 cd apps\api; .venv\Scripts\ruff check .           # clean
-cd apps\api; .venv\Scripts\mypy catalyst          # strict, clean, 60 files
+cd apps\api; .venv\Scripts\mypy codonlab          # strict, clean, 60 files
 python scripts\verify_gates.py                    # 162 checks, needs the live stack
 ```
 
@@ -442,7 +451,7 @@ built around.
 - **Goal parsing is Claude with a deterministic fallback**, not a form and not
   rules-only. The fallback is the offline path and the test path, not a degraded
   mode.
-- **Parser model defaults to `claude-opus-5`** (`CATALYST_PARSER_MODEL`). An
+- **Parser model defaults to `claude-opus-5`** (`CODONLAB_PARSER_MODEL`). An
   earlier Sonnet 5 suggestion was withdrawn — downgrading for cost is the owner's
   call, not the assistant's.
 - **UniProt constraint annotations are suggestions, never auto-applied**, and
@@ -579,6 +588,35 @@ built around.
 - **`P0CG48` is Polyubiquitin-C (685 aa), not the 76 aa ubiquitin monomer.**
   Reconciliation correctly refused it with nine candidate offsets. Not a bug.
 
+### Machine facts discovered during the rename (2026-09-01)
+
+- **Host port 5433 is no longer free.** Another project's container,
+  `rihs-postgres`, holds it. This project moved to **5434** in the local `.env`.
+  Nothing inside the compose network is affected — services still reach Postgres
+  on 5432 by name — so only host tooling sees the change. Do not stop the other
+  project's container to reclaim the port.
+- **`import torch` is blocked by a Windows Application Control policy.**
+  `OSError: [WinError 4551] ... Error loading "...torch/lib/shm.dll"`. The DLL is
+  present and unmodified since 2026-08-23; the policy is a machine-level setting
+  that changed underneath the project, and it is **not** a consequence of the
+  rename — `import torch` fails on its own, before any project code runs. One
+  test fails because of it: `test_providers.py::test_a_predictor_cannot_produce_a_score_row[esm2_t33_650m]`.
+  Resolving it means a change to Windows security settings, which is the owner's
+  to make. **Worth noting separately:** the failure also shows that `ESMScorer`
+  lets an `OSError` from a blocked runtime escape `score()` rather than reporting
+  itself unavailable through `PredictorUnavailableError`. That is a real
+  robustness gap in the provider, independent of this machine, and it is filed as
+  open thread 10.
+- **The Postgres role and database were renamed in place**, not recreated: the
+  volume holds 4,028 real ESM-2 scores that cost ~56 minutes of CPU. Renaming a
+  role does **not** carry its password across, which is the trap — the role
+  renamed cleanly and then every connection failed with "password authentication
+  failed" until `ALTER ROLE codonlab PASSWORD ...` was run. Note also that
+  `pg_isready` does not authenticate, so the compose healthcheck reported
+  *healthy* throughout; and `psql -h 127.0.0.1` inside the container uses trust
+  auth, so it is **not** a valid test of a password. Verify credentials from
+  another container, which is the path that actually matters.
+
 ### Workarounds currently in place
 
 Stuck `RUNNING` run — nothing reaps it, so recover manually:
@@ -588,6 +626,12 @@ UPDATE run SET status='CANCELLED', error='abandoned' WHERE status='RUNNING';
 ```
 
 ### Fragile — touch carefully
+
+- `providers/mock.py` line ~122 still passes the literal `"catalyst.mock.shared"`.
+  It is **deliberately not renamed**: it is an opaque hash salt, and every
+  synthetic number the product has produced derives from it. Changing the token
+  changes the numbers and breaks reproducibility against every stored score. A
+  comment beside it says so. Do not "finish the rename" there.
 
 - `providers/esm.py::_residue_token_start` and the `index = start + position - 1`
   arithmetic in `score()`.
@@ -650,18 +694,24 @@ Ranked by priority.
    column — the signal `BRIEF.md` §6 is built around — has never been observed
    with real numbers. Needs a target that has a structure.
 9. **The containerised real-provider path is unverified.** Build the image with
-   `[models]` and run the opt-in gate section (`CATALYST_GATE_REAL_MODELS=1`).
-10. **`Variant.region` is dead weight** — populate it deliberately or drop it.
+   `[models]` and run the opt-in gate section (`CODONLAB_GATE_REAL_MODELS=1`).
+10. **`ESMScorer` lets a runtime failure escape as `OSError`.** Surfaced when a
+    Windows policy blocked torch's DLLs (§8): `available()` said yes, then
+    `score()` raised `OSError` instead of `PredictorUnavailableError`. A
+    predictor whose runtime is installed but unloadable should report itself
+    unavailable with the reason, which is what the pipeline already knows how
+    to handle. Independent of that machine's policy.
+11. **`Variant.region` is dead weight** — populate it deliberately or drop it.
     Phase 7 gave the column a second reader to think about: a stacked variant has
     no single position, and its `features` carries `sequence_positions` instead.
-11. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
-12. **Alignment identity-scoring was never re-confirmed** by the owner
+12. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
+13. **Alignment identity-scoring was never re-confirmed** by the owner
     (`ARCHITECTURE.md` §9).
-13. **The Claude goal parser has never run against the live API.** No
+14. **The Claude goal parser has never run against the live API.** No
     `ANTHROPIC_API_KEY` is configured, so every parse falls back to the rule
     parser and is badged as such. Failure branches are covered hermetically
     against a fake client. Do not describe it as working until it has been called.
-14. **A cold clone has never been tested.** `docker compose up` has only ever run
+15. **A cold clone has never been tested.** `docker compose up` has only ever run
     on a machine that already had images and a populated database.
 
 ---
@@ -695,7 +745,7 @@ Ranked by priority.
 
 | Resource                          | URL / identifier                                              | Used for                                        |
 | --------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| Repo remote                       | `https://github.com/vyom-aggarwal/catalyst-ai.git`            | `origin`, in sync with local `main` at `90e6f40` |
+| Repo remote                       | `https://github.com/vyom-aggarwal/catalyst-ai.git`            | `origin`. Still carries the pre-rename name; local `main` is **ahead** and unpushed |
 | ThermoMPNN                        | `github.com/Kuhlman-Lab/ThermoMPNN` @ `2b04fd370e399911b1fa5848112cc9013f084110` | Vendored source + weights, MIT   |
 | ThermoMPNN paper                  | doi:10.1073/pnas.2314853121                                   | Dieckhaus et al. 2024, PNAS 121(6)              |
 | ESM-2 checkpoint                  | `facebook/esm2_t33_650M_UR50D` (HuggingFace)                  | Masked-marginal scoring                         |

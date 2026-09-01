@@ -1,4 +1,4 @@
-import type { Filtered, Ranking, RunStage } from '@catalyst/schema'
+import type { Filtered, Ranking, RunStage } from '@codonlab/schema'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 

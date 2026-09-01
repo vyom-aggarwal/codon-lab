@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.epistasis import (
+from codonlab.domain.epistasis import (
     ADDITIVITY_ASSUMPTION,
     PAIR_PROXIMITY_ANGSTROM,
     Proximity,

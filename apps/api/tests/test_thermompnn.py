@@ -2,7 +2,7 @@
 
 Hermetic by default; the tests that load the model are opt-in:
 
-    CATALYST_TEST_REAL_MODELS=1 pytest tests/test_thermompnn.py
+    CODONLAB_TEST_REAL_MODELS=1 pytest tests/test_thermompnn.py
 
 The sign convention is the one that matters most here. Getting it backwards would
 invert every stability recommendation the product makes, silently, and the output
@@ -17,13 +17,13 @@ import uuid
 
 import pytest
 
-from catalyst.domain.goal import Objective
-from catalyst.providers.base import StructureRef, TargetContext
-from catalyst.providers.thermompnn import COMMIT, THERMOMPNN
+from codonlab.domain.goal import Objective
+from codonlab.providers.base import StructureRef, TargetContext
+from codonlab.providers.thermompnn import COMMIT, THERMOMPNN
 
-REAL = os.environ.get("CATALYST_TEST_REAL_MODELS") == "1"
+REAL = os.environ.get("CODONLAB_TEST_REAL_MODELS") == "1"
 requires_model = pytest.mark.skipif(
-    not REAL, reason="needs the ThermoMPNN weights; set CATALYST_TEST_REAL_MODELS=1"
+    not REAL, reason="needs the ThermoMPNN weights; set CODONLAB_TEST_REAL_MODELS=1"
 )
 
 
@@ -88,7 +88,7 @@ def test_the_vendored_source_records_its_provenance() -> None:
     from without going through git history."""
     from pathlib import Path
 
-    vendor = Path(__file__).parent.parent / "catalyst" / "providers" / "_vendor" / "thermompnn"
+    vendor = Path(__file__).parent.parent / "codonlab" / "providers" / "_vendor" / "thermompnn"
     assert (vendor / "LICENSE").exists()
     for name in ("transfer_model.py", "protein_mpnn_utils.py"):
         header = (vendor / name).read_text(encoding="utf-8")[:800]
@@ -105,7 +105,7 @@ def test_the_vendored_source_records_its_provenance() -> None:
 def crambin() -> tuple[str, str]:
     from pathlib import Path
 
-    from catalyst.domain.aminoacid import three_to_one
+    from codonlab.domain.aminoacid import three_to_one
 
     pdb = (Path(__file__).parent / "fixtures" / "1crn.pdb").read_text()
     seen: set[str] = set()
@@ -138,7 +138,7 @@ def test_the_weights_hash_covers_both_checkpoints() -> None:
 
 @requires_model
 def test_it_scores_a_real_structure_in_a_plausible_range() -> None:
-    from catalyst.domain.variants import enumerate_single_substitutions
+    from codonlab.domain.variants import enumerate_single_substitutions
 
     pdb, sequence = crambin()
     labels: list[str | None] = [str(index + 1) for index in range(len(sequence))]
@@ -174,7 +174,7 @@ def test_the_sign_convention_holds_against_physics() -> None:
     """
     import statistics
 
-    from catalyst.domain.variants import enumerate_single_substitutions
+    from codonlab.domain.variants import enumerate_single_substitutions
 
     pdb, sequence = crambin()
     labels: list[str | None] = [str(index + 1) for index in range(len(sequence))]
@@ -216,8 +216,8 @@ def test_a_residue_mismatch_refuses_rather_than_scoring_the_wrong_one() -> None:
     """The same class of check as the ESM tokenizer alignment."""
     from dataclasses import replace
 
-    from catalyst.domain.variants import enumerate_single_substitutions
-    from catalyst.providers.base import PredictorUnavailableError
+    from codonlab.domain.variants import enumerate_single_substitutions
+    from codonlab.providers.base import PredictorUnavailableError
 
     pdb, sequence = crambin()
     labels: list[str | None] = [str(index + 1) for index in range(len(sequence))]

@@ -13,11 +13,11 @@ from typing import Any
 
 import pytest
 
-from catalyst.models import Goal
-from catalyst.models.base import utcnow
-from catalyst.providers.mock import MOCK_FITNESS, MOCK_STABILITY
-from catalyst.services import runs as service
-from catalyst.services.targets import ServiceError
+from codonlab.models import Goal
+from codonlab.models.base import utcnow
+from codonlab.providers.mock import MOCK_FITNESS, MOCK_STABILITY
+from codonlab.services import runs as service
+from codonlab.services.targets import ServiceError
 
 # --------------------------------------------------------------------------- #
 # The stage list
@@ -199,7 +199,7 @@ def test_the_cache_key_covers_the_inputs_a_prediction_depends_on() -> None:
     computed against something else."""
     import uuid as _uuid
 
-    from catalyst.providers import StructureRef, TargetContext
+    from codonlab.providers import StructureRef, TargetContext
 
     def ctx(sequence: str, structure_hash: str | None) -> TargetContext:
         return TargetContext(

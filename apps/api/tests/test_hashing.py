@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from catalyst.domain.hashing import (
+from codonlab.domain.hashing import (
     UnhashableInputError,
     canonical_json,
     content_hash,

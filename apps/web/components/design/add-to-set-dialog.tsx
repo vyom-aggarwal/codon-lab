@@ -1,6 +1,6 @@
 'use client'
 
-import type { DesignSetSummary } from '@catalyst/schema'
+import type { DesignSetSummary } from '@codonlab/schema'
 import type { Route } from 'next'
 import { Layers } from 'lucide-react'
 import { useRouter } from 'next/navigation'

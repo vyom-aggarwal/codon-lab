@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { RankedVariant, Ranking } from '@catalyst/schema'
+import type { RankedVariant, Ranking } from '@codonlab/schema'
 import { describe, expect, it } from 'vitest'
 
 import { rationaleFor } from '@/lib/rationale'

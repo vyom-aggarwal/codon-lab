@@ -1,29 +1,29 @@
 # `docker compose up` should bring the whole stack up with seed data on a clean
 # machine, first try. The api service runs migrations and seeds before serving.
 
-name: catalyst-ai
+name: codon-lab
 
 # The api and the worker are the same image with the same configuration and two
 # different commands. Shared here rather than copied, because a worker whose
 # provider set has drifted from the API's would write numbers the API describes
 # incorrectly — and the drift would be invisible.
 x-api-environment: &api-environment
-  DATABASE_URL: postgresql+psycopg://catalyst:catalyst@postgres:5432/catalyst
+  DATABASE_URL: postgresql+psycopg://codonlab:codonlab@postgres:5432/codonlab
   REDIS_URL: redis://redis:6379/0
   CORS_ORIGINS: http://localhost:3000
-  CATALYST_PROVIDERS: mock
+  CODONLAB_PROVIDERS: mock
   # Read from .env in this directory, which git ignores. Empty is fine and
   # selects the deterministic fallback parser.
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  CATALYST_PARSER_MODEL: ${CATALYST_PARSER_MODEL:-claude-opus-5}
+  CODONLAB_PARSER_MODEL: ${CODONLAB_PARSER_MODEL:-claude-opus-5}
 
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: catalyst
-      POSTGRES_PASSWORD: catalyst
-      POSTGRES_DB: catalyst
+      POSTGRES_USER: codonlab
+      POSTGRES_PASSWORD: codonlab
+      POSTGRES_DB: codonlab
     ports:
       # Host port 5433 by default: 5432 is commonly taken by another project's
       # database or a local Postgres install. Inside the compose network the
@@ -33,7 +33,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U catalyst -d catalyst']
+      test: ['CMD-SHELL', 'pg_isready -U codonlab -d codonlab']
       interval: 3s
       timeout: 3s
       retries: 20
@@ -63,8 +63,8 @@ services:
       - ./apps/api:/app
     command: >
       sh -c "alembic upgrade head
-      && python -m catalyst.seed
-      && uvicorn catalyst.main:app --host 0.0.0.0 --port 8000 --reload"
+      && python -m codonlab.seed
+      && uvicorn codonlab.main:app --host 0.0.0.0 --port 8000 --reload"
 
   # Design runs execute here, never in a request handler. The API enqueues and
   # returns; without this container a run stays queued forever, which /queue
@@ -84,7 +84,7 @@ services:
         condition: service_started
     volumes:
       - ./apps/api:/app
-    command: python -m catalyst.workers.worker
+    command: python -m codonlab.workers.worker
 
   web:
     build:
@@ -109,7 +109,7 @@ services:
       - /app/node_modules
       - /app/apps/web/node_modules
       - /app/apps/web/.next
-    command: pnpm --filter @catalyst/web dev
+    command: pnpm --filter @codonlab/web dev
 
 volumes:
   postgres-data:

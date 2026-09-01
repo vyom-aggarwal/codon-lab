@@ -1,6 +1,6 @@
 'use client'
 
-import type { RankedVariant, Run, ScoreCell } from '@catalyst/schema'
+import type { RankedVariant, Run, ScoreCell } from '@codonlab/schema'
 import { X } from 'lucide-react'
 import type { Route } from 'next'
 import Link from 'next/link'

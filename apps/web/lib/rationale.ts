@@ -1,4 +1,4 @@
-import type { Metric, RankedVariant, Ranking } from '@catalyst/schema'
+import type { Metric, RankedVariant, Ranking } from '@codonlab/schema'
 
 /**
  * Why this variant was proposed, composed from the values that actually exist.

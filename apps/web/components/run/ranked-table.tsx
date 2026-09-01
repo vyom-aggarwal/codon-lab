@@ -1,4 +1,4 @@
-import type { Ranking, ScoreCell } from '@catalyst/schema'
+import type { Ranking, ScoreCell } from '@codonlab/schema'
 
 import {
   EmptyCell,

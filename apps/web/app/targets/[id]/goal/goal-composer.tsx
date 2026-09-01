@@ -1,6 +1,6 @@
 'use client'
 
-import type { Goal, GoalSpec, Objective } from '@catalyst/schema'
+import type { Goal, GoalSpec, Objective } from '@codonlab/schema'
 import { Check, Lock, Pencil, Play } from 'lucide-react'
 import type { Route } from 'next'
 import { useRouter } from 'next/navigation'

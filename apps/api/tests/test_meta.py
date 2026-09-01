@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from catalyst.config import Settings, get_settings
-from catalyst.main import app
+from codonlab.config import Settings, get_settings
+from codonlab.main import app
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def test_meta_demo_flag_is_derived_from_the_predictors_not_the_string() -> None:
     today; the moment they could not, the interface would be showing numbers a
     mock produced with no banner over them.
     """
-    from catalyst.services import providers as provider_service
+    from codonlab.services import providers as provider_service
 
     settings = _settings(("mock",))
     assert settings.demo_mode is True

@@ -1,4 +1,4 @@
-import type { Suggestion } from '@catalyst/schema'
+import type { Suggestion } from '@codonlab/schema'
 import { ChevronLeft } from 'lucide-react'
 import type { Route } from 'next'
 import Link from 'next/link'

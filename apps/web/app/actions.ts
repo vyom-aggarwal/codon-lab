@@ -1,6 +1,6 @@
 'use server'
 
-import type { ConstraintKind, Goal, GoalSpec } from '@catalyst/schema'
+import type { ConstraintKind, Goal, GoalSpec } from '@codonlab/schema'
 import { revalidatePath } from 'next/cache'
 
 import * as api from '@/lib/api'

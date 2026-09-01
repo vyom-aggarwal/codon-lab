@@ -29,8 +29,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from catalyst.domain.constants.max_asa import MAX_ASA, REFERENCE_SET
-from catalyst.features.structure import RegionCutoffs, SasaParameters, compute
+from codonlab.domain.constants.max_asa import MAX_ASA, REFERENCE_SET
+from codonlab.features.structure import RegionCutoffs, SasaParameters, compute
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -266,7 +266,7 @@ def test_no_residue_exceeds_its_published_maximum() -> None:
 
 
 def test_an_unlisted_residue_type_has_no_maximum_rather_than_a_guess() -> None:
-    from catalyst.domain.constants.max_asa import max_asa
+    from codonlab.domain.constants.max_asa import max_asa
 
     assert max_asa("ALA") == 129.0
     assert max_asa("MSE") is None
@@ -287,14 +287,14 @@ def test_cutoffs_classify_at_the_stated_boundaries() -> None:
 
 
 def test_cutoffs_out_of_order_are_refused() -> None:
-    from catalyst.domain.regions import CutoffError
+    from codonlab.domain.regions import CutoffError
 
     with pytest.raises(CutoffError):
         RegionCutoffs(core_max=0.6, surface_min=0.2)
 
 
 def test_cutoffs_default_to_the_owners_values_and_say_so_in_the_manifest() -> None:
-    from catalyst.domain.regions import RegionCutoffs as Cutoffs
+    from codonlab.domain.regions import RegionCutoffs as Cutoffs
 
     assert Cutoffs() == Cutoffs(core_max=0.25, surface_min=0.40)
     # An absent project setting means the defaults are in force, and they are
