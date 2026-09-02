@@ -32,6 +32,14 @@ export function AppFrame({ demoMode, children }: { demoMode: boolean; children: 
                 Projects
               </Link>
             </li>
+            <li>
+              <Link
+                href="/scorecard"
+                className="h-control rounded-control text-13 text-text hover:bg-surface-sunk flex items-center px-2"
+              >
+                Scorecard
+              </Link>
+            </li>
           </ul>
         </nav>
         <main className="min-w-0 flex-1 overflow-auto">{children}</main>

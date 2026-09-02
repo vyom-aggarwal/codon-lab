@@ -107,6 +107,20 @@ Data colour is a **separate system** from UI colour and does not use the tokens 
 
 Gradients are permitted **only** inside data visualisations. Nowhere else.
 
+**A chart that encodes nothing in colour uses no data palette.** The Phase 8
+scorecard charts — the predicted-vs-measured scatter and the calibration curve —
+encode both of their variables in *position*. Colour there is not carrying a
+value, so introducing a diverging or sequential ramp would be decoration
+pretending to be an encoding, and would put a second meaning on a screen where
+`--accent` already means "this is the data". Both therefore draw marks in
+`--accent`, gridlines in `--border`, axes and the identity reference in
+`--border-strong`. The rules above apply the moment a chart encodes a value in
+colour; none currently does.
+
+Consequently `tokens.test.ts` still forbids every colour literal in
+`components/scorecard/`, and that is correct rather than an oversight — the
+exemption for data colour begins where a palette is actually needed.
+
 ### 1.5 Type
 
 Two faces, no more.
@@ -358,3 +372,38 @@ it for — the value is genuinely absent and the text carries no information the
 user must read; the reason does, and that is in the tooltip and again in the panel
 summary. The summary counts unknown pairs on its own line whenever there are any,
 so the absence is legible without hovering anything.
+
+---
+
+## 11. The scorecard figure row
+
+Phase 8. This is a design rule that exists because of a *scientific* constraint, so
+it is stated here and enforced in a test rather than left to layout judgement.
+
+`ARCHITECTURE.md` §13: a rank statistic never stands alone. A predictor that is
+perfectly ordered but reads a constant 2 kcal/mol high scores a flawless Spearman
+and a flawless precision@k. So the card renders four figures **in one row, in one
+`<dl>`, in this order**:
+
+| Position | Figure                | Kind  |
+| -------- | --------------------- | ----- |
+| 1        | Spearman ρ            | rank  |
+| 2        | Precision@k           | rank  |
+| 3        | MAE, in the unit      | error |
+| 4        | Mean signed error     | bias  |
+
+Rank and bias are two cells apart and **may not be separated** by a tab, a
+disclosure, a scroll or a second card. `apps/web/test/scorecard.test.tsx` asserts
+from the rendered DOM that the bias figure shares a `<dl>` with the rank figures;
+closing that list early fails four tests.
+
+Two renderings follow from it:
+
+- An uncomputable figure reads `—` and its reason is printed **inside the same
+  block**, immediately beneath the row — never in a tooltip, never in a footnote.
+  A reader must not be able to mistake "the error could not be measured" for "the
+  error is small". This is the one place a `—` carries a warn-toned panel rather
+  than only a hover.
+- The bias figure is the only one set in `font-strong`. It is the figure most
+  likely to be skipped and the one §13 exists to protect.
+

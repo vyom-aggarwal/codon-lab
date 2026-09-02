@@ -10,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from codonlab import __version__
 from codonlab.config import get_settings
-from codonlab.routes import design_sets, goals, meta, projects, runs, targets
+from codonlab.routes import (
+    design_sets,
+    goals,
+    measurements,
+    meta,
+    projects,
+    runs,
+    targets,
+)
 
 app = FastAPI(
     title="Codon Lab API",
@@ -33,3 +41,4 @@ app.include_router(targets.router)
 app.include_router(goals.router)
 app.include_router(runs.router)
 app.include_router(design_sets.router)
+app.include_router(measurements.router)

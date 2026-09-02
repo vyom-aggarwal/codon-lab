@@ -77,6 +77,18 @@ export default async function TargetPage({ params }: { params: Promise<{ id: str
           >
             Goal
           </Link>
+          <Link
+            href={`/targets/${target.id}/measurements` as Route}
+            className="text-12 text-accent underline-offset-2 hover:underline"
+          >
+            Import measured results
+          </Link>
+          <Link
+            href={`/targets/${target.id}/scorecard` as Route}
+            className="text-12 text-accent underline-offset-2 hover:underline"
+          >
+            Scorecard
+          </Link>
         </nav>
       </header>
 

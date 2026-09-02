@@ -12,11 +12,12 @@ budget on it.
 The gap is not capability. It is **trust**. This is built for someone skeptical, busy,
 and correct.
 
-> **Status: Phases 1–6 of 9 complete; Phase 7 partially.** Real ESM-2 and ThermoMPNN run
-> and are verified; the shipped default is a pair of synthetic providers that badge every
-> number they invent. The design set builder and its epistasis warnings ship. The wet-lab
-> handoff does **not**: primers are refused, with the reason stated, because no target
-> carries a coding DNA sequence to design against.
+> **Status: Phases 1–8 of 9 complete**, with one exception. Real ESM-2 and ThermoMPNN
+> run and are verified; the shipped default is a pair of synthetic providers that badge
+> every number they invent. The design set builder, its epistasis warnings, and the
+> validation loop — results intake, the join, and the per-predictor scorecard — all ship.
+> The **wet-lab handoff does not**: primers are refused, with the reason stated, because
+> no target carries a coding DNA sequence to design against.
 > [What is and is not verified](#what-is-not-verified) is tracked as carefully as the
 > code, because on this project that distinction *is* the product.
 
@@ -88,7 +89,7 @@ Verify the whole thing end to end over HTTP:
 python scripts/verify_gates.py
 ```
 
-**162 checks** asserting every phase exit gate against a live stack. It seeds its own
+**225 checks** asserting every phase exit gate against a live stack. It seeds its own
 projects and targets, so it is idempotent and safe to re-run. A full pass fetches from
 UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few minutes.
 
@@ -201,10 +202,19 @@ Consequences, written into the build:
 - **The agreement column** is labelled *agreement*, never *confidence*, and its tooltip
   says why: predictors trained on overlapping data share their biases, so agreeing tells
   you the models are alike, not that either is right.
-- **The Phase 8 scorecard** must report a rank metric **and** an error metric (MAE) **and**
-  a bias term (mean signed error), with bias visually adjacent to rank. A predictor offset
-  by a constant +2 kcal/mol scores Spearman 1.00 and precision@10 = 1.0 while being useless
-  for the decision the user is actually making, which is absolute.
+- **The Phase 8 scorecard** reports a rank metric **and** an error metric (MAE) **and** a
+  bias term (mean signed error), with bias visually adjacent to rank. A predictor offset
+  by a constant +2 kcal/mol scores Spearman 1.00 and precision@10 = 1.0 while being
+  useless for the decision the user is actually making, which is absolute. That is not a
+  hypothetical: the gate constructs exactly that predictor and asserts it scores
+  **ρ = 1.0000** and is caught only by the bias term at **−2.00 kcal/mol**, and
+  `scorecard.test.tsx` fails the build if the bias figure is moved out of the row the
+  rank figures are in.
+- **Where an absolute error cannot be computed, none is shown.** A predicted ΔΔG in
+  kcal/mol and a measured T50 in °C are not the same quantity, so the scorecard reads
+  `—` and prints the reason beside the rank figure rather than converting between them.
+  Opposed sign conventions are refused the same way: the product will not negate one
+  series to make two agree.
 
 ### Two off-by-ones that shipped, and how they were caught
 
@@ -323,10 +333,10 @@ that genuinely crosses Postgres is asserted over HTTP in `verify_gates.py`, beca
 the boundary a future caller actually crosses.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test          # 127 vitest, 8 files
-cd apps/api && .venv/Scripts/python -m pytest -q  # 336 pytest, 6 skipped (opt-in)
-cd apps/api && .venv/Scripts/ruff check . && .venv/Scripts/mypy codonlab   # strict
-python scripts/verify_gates.py                    # 162 checks, live stack
+pnpm typecheck && pnpm lint && pnpm test          # 145 vitest, 9 files
+cd apps/api && .venv/Scripts/python -m pytest -q  # 396 pass, 6 skipped (opt-in)
+cd apps/api && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy codonlab
+python scripts/verify_gates.py                    # 225 checks, live stack
 ```
 
 The design system is enforced mechanically rather than by discipline:
@@ -370,8 +380,16 @@ the point.
   its values are compared against no external benchmark.
 - **ESM-2 and ThermoMPNN scoring the same run.** Both work individually, and the aggregation
   is unit-tested — but two real predictors disagreeing on one variant has not been observed.
-- **No screen has been looked at by a human.** Rendering was verified by reading the DOM,
-  not pixels.
+- **No screen has been looked at by a human.** Rendering was verified by reading the DOM
+  and, for the Phase 8 screens, by driving them in a real browser and screenshotting the
+  result. That establishes *correct*, not *good*; the second judgement has never been made.
+- **The scorecard's error and bias terms have never been exercised on real measured data.**
+  The seeded measurements are T50 in °C, which is not commensurable with any predictor's
+  metric, so on the seeded data MAE and bias correctly read `—` with the reason. The
+  computable path is covered hermetically and in the gate with constructed values. Doing
+  it for real needs a measured ΔΔG in kcal/mol, and no public dataset was seeded for it
+  because none was found whose quantity could be verified to mean the same thing as
+  ThermoMPNN's ΔΔG.
 
 ### Known gaps
 
@@ -380,10 +398,18 @@ the point.
   index then blocks an identical re-run. A worker heartbeat or a startup sweep is the fix.
 - **`JOB_TIMEOUT_SECONDS = 3600` is marginal.** A real run on the 212-residue lipase used
   93% of it. At the observed rate a 550-residue target needs ~142 minutes and would be
-  killed. Raising the cap is one option; making the scoring stage resumable is better.
+  killed. The decision taken is to make the scoring stage resumable rather than raise the
+  cap; it is **not built**, and the constant has deliberately not been edited meanwhile.
 - **ΔΔG intervals.** `BRIEF.md` §7 requires an interval and ThermoMPNN has no per-variant
   uncertainty to give. It reports the point estimate with the reason stated, rather than
-  dressing a benchmark RMSE as a per-variant interval. An open conflict with the brief.
+  dressing a benchmark RMSE as a per-variant interval. This leaves the brief's requirement
+  formally unmet, and visibly so, which is the honest state. Phase 8 opens a real route to
+  closing it — the residual spread the scorecard accumulates is an empirically grounded
+  interval — but that needs a stated minimum sample size and is not built.
+- **Variants written in a superseded numbering scheme.** Changing a target's canonical
+  scheme leaves behind the `Variant` rows the old one produced; they carry scores, so
+  nothing deletes them. The Phase 8 join excludes them and reports the count, but no other
+  surface defends against them yet.
 
 ---
 
@@ -397,22 +423,35 @@ the point.
 | 4 — Job queue, `Predictor`, `MockProvider`, run view | ✅ | Gate: a run completes end to end with demo banners correct everywhere |
 | 5 — Variant workbench, Mol\*, provenance drawer | ✅ | Gate: two clicks counted with `isTrusted`; constant work per scroll asserted |
 | 6 — Real `ESMScorer` + `StabilityPredictor` | ✅ | ESM-2 matched against independent computation; ThermoMPNN sign established two ways |
-| 7 — Design sets, epistasis, wet-lab handoff | ⬜ | Exports must refuse primers while any provider is a mock |
-| 8 — Results intake, calibration, scorecard | ⬜ | **The moat.** Rank + error + bias, per §13 |
+| 7 — Design sets, epistasis, wet-lab handoff | ◐ | Builder and epistasis warnings ship; exports refuse primers with the reason stated. The handoff itself is blocked on template DNA |
+| 8 — Results intake, calibration, scorecard | ✅ | **The moat.** Rank + error + bias, per §13, demonstrated on 2,172 real measured T50 values |
 | 9 — Playwright, a11y pass, README, accurate screenshots | ⬜ | ⌘K and the `?` shortcut sheet land here, deferred deliberately in `DESIGN.md` §9 |
 
 **Phase 8 is the one that matters.** The user uploads measured results from the bench, the
-app joins them to predicted variants, and a persistent scorecard accumulates per predictor
-per target class. Over three projects the lab learns which predictor to trust for their
-chemistry. `BRIEF.md` §2 calls it "the entire moat" — that is the owner's read of the
-market, recorded here as their claim rather than a survey this repo has run.
+app joins them to predicted variants, and a persistent scorecard accumulates per predictor.
+Over three projects the lab learns which predictor to trust for their chemistry.
+`BRIEF.md` §2 calls it "the entire moat" — that is the owner's read of the market,
+recorded here as their claim rather than a survey this repo has run.
+
+It ships against real data. The build seeds 2,172 measured T50 values for *B. subtilis*
+lipase A from ProteinGym's `ESTA_BACSU_Nutschel_2020` (Nutschel et al. 2020,
+doi:10.1021/acs.jcim.9b00954), vendored with its SHA-256 and checked byte-identical
+against UniProt P37957. Against those measurements, **real ESM-2 650M scores Spearman
+ρ = 0.30 where the synthetic predictor scores −0.06** — measured on this machine, not
+quoted from a paper.
+
+The join is exact and has no similarity threshold anywhere in it: `A123V` and `A123L`
+differ by one character and are different experiments. Where a whole file is written in
+another numbering scheme — as the seeded dataset is, by 31 positions — the app proposes
+one constant shift, but only when that shift explains **every** unplaced row and no other
+shift does, and it never applies one on the user's behalf.
 
 Open scientific decisions are tracked in `HANDOFF.md` §9 and are **never** decided by the
 implementation. They are put to the owner; where the owner delegates one back, it is
 recorded in `ARCHITECTURE.md` with its reasoning and with what would change it, so a
 delegated decision does not decay into folklore. The primer Tm algorithm and its
-parameters went that way on 2026-08-25 (`ARCHITECTURE.md` §16.1); fuzzy-join thresholds
-for Phase 8 are still open.
+parameters went that way on 2026-08-25 (`ARCHITECTURE.md` §16.1), and Phase 8's
+fuzzy-join rules on 2026-09-01 (`ARCHITECTURE.md` §17.1).
 
 ---
 

@@ -840,6 +840,300 @@ def main() -> int:
          "Within 8" in page)
     step("and it carries the persistent demo bar", "Demo data" in page)
 
+
+    # ======================================================================= #
+    # Phase 8 — results intake, the join, and the scorecard
+    # ======================================================================= #
+
+    section("Phase 8: a column mapping is offered, never assumed")
+    # Rows in *full-length* numbering, against a target whose canonical scheme is
+    # the mature protein. This is the real shape of the problem, not a contrived
+    # one: the seeded deep mutational scan is written exactly this way.
+    shifted_csv = "mutant,T50\nA32N,48.60\nE33K,47.10\nH34Y,46.56\nN35D,43.28"
+    status, inspected = call(
+        "POST", f"/targets/{target_id}/measurements/inspect", {"text": shifted_csv}
+    )
+    step("a pasted table is read", status == 200,
+         f"{inspected['row_count']} rows, split on "
+         f"{'tab' if inspected['delimiter'] == chr(9) else 'comma'}")
+    step("a mapping is suggested for the user to confirm",
+         inspected["suggested"] is not None
+         and inspected["suggested"]["label"] == "mutant"
+         and inspected["suggested"]["value"] == "T50")
+    step("each column carries a sample so a header can be recognised",
+         all(column["sample"] for column in inspected["columns"]))
+
+    mapping = {"label": "mutant", "value": "T50", "sd": None, "replicate": None}
+
+    section("Phase 8: a numbering shift is proposed with evidence, never applied")
+    status, preview = call(
+        "POST",
+        f"/targets/{target_id}/measurements/preview",
+        {"text": shifted_csv, "mapping": mapping, "offset": None},
+    )
+    step("the preview writes nothing and answers", status == 200)
+    step("nothing joined, because the file is in another scheme",
+         preview["joined"] == 0, f"{preview['unjoined']} unplaced")
+    step("a wild-type mismatch names the residue the scheme actually has",
+         any("is S in" in row["detail"] for row in preview["rows"]),
+         next((row["detail"] for row in preview["rows"] if "is S in" in row["detail"]), ""))
+    step("one shift is proposed", preview["offset"] is not None
+         and preview["offset"]["offset"] == -31,
+         f"offset {preview['offset']['offset'] if preview['offset'] else None}")
+    step("and it is unanimous over every unplaced row",
+         preview["offset"]["witnesses"] == preview["unjoined"],
+         f"{preview['offset']['witnesses']} witnesses")
+    step("the proposal is not applied by the act of proposing it",
+         preview["joined"] == 0)
+    step("stale variants in a superseded scheme are excluded from the join",
+         "stale_variants" in preview, f"{preview['stale_variants']} excluded")
+
+    status, accepted = call(
+        "POST",
+        f"/targets/{target_id}/measurements/preview",
+        {"text": shifted_csv, "mapping": mapping, "offset": -31},
+    )
+    step("accepting the shift joins the rows it explains",
+         accepted["joined"] == accepted["total_rows"],
+         f"{accepted['joined']}/{accepted['total_rows']}")
+    step("and the rows still read back in the notation the file used",
+         all(row["raw_label"].startswith(("A32", "E33", "H34", "N35"))
+             for row in accepted["rows"]))
+    step("the canonical code is what they joined to",
+         {row["code"] for row in accepted["rows"]} == {"A1N", "E2K", "H3Y", "N4D"},
+         ", ".join(sorted(row["code"] for row in accepted["rows"])))
+
+    section("Phase 8: a similar code is not a match")
+    # `A1N` is in this run. `A1Z` is not an amino acid, and `Q1N` names a residue
+    # the scheme does not have there. Neither may be quietly attributed to A1N.
+    status, strict = call(
+        "POST",
+        f"/targets/{target_id}/measurements/preview",
+        {"text": "mutant,T50\nA1N,48.6\nQ1N,47.0\nA1Z,44.0\nnot a code,41.0",
+         "mapping": mapping, "offset": None},
+    )
+    by_label = {row["raw_label"]: row for row in strict["rows"]}
+    step("an exact code joins", by_label["A1N"]["code"] == "A1N")
+    step("a different wild-type residue does not join",
+         by_label["Q1N"]["code"] is None
+         and by_label["Q1N"]["outcome"] == "wild_type_mismatch")
+    step("a non-residue letter is not a mutation code",
+         by_label["A1Z"]["code"] is None)
+    step("free text is reported, not silently dropped",
+         by_label["not a code"]["outcome"] == "unparseable")
+    step("every uploaded row comes back", strict["total_rows"] == 4)
+
+    section("Phase 8: a row that fails to join survives the import")
+    status, imported = call(
+        "POST",
+        f"/targets/{target_id}/measurements",
+        {
+            "text": shifted_csv + "\nempty well,0.0",
+            "mapping": mapping,
+            "assay": "thermal_stability",
+            "metric": "t50_celsius",
+            "unit": "°C",
+            "higher_is_better": True,
+            "offset": -31,
+            "source_note": f"verify_gates {stamp}",
+        },
+        retry_safe=False,
+    )
+    step("the import is accepted", status == 201)
+    step("every row was written, not just the ones that joined",
+         imported["written"] == 5, f"{imported['written']} written")
+    step("four joined and one did not",
+         imported["joined"] == 4 and imported["unjoined"] == 1)
+
+    experiment_id = imported["experiment_id"]
+    status, unjoined = call("GET", f"/experiments/{experiment_id}/unjoined")
+    step("the unjoined row is retrievable", status == 200 and len(unjoined) == 1)
+    step("and reads back in the label the file gave it",
+         unjoined[0]["raw_label"] == "empty well", unjoined[0]["raw_label"])
+
+    section("Phase 8: an import states its own sign convention")
+    status, refused = call(
+        "POST",
+        f"/targets/{target_id}/measurements",
+        {
+            "text": "mutant,T50\nA32N,48.60",
+            "mapping": mapping,
+            "assay": "thermal_stability",
+            "metric": "t50_celsius",
+            "unit": "",
+            "higher_is_better": True,
+            "offset": -31,
+        },
+        retry_safe=False,
+    )
+    step("an import with no unit is refused", status == 400,
+         refused.get("detail", {}).get("message", ""))
+    step("and the refusal says why the unit matters",
+         "unlike units" in refused.get("detail", {}).get("remedy", ""))
+
+    section("Phase 8: a rank statistic never stands alone")
+    status, report = call("GET", f"/targets/{target_id}/scorecard")
+    step("the scorecard answers", status == 200, f"{len(report['cards'])} card(s)")
+    step("it rests on measured values joined to variants",
+         report["measured_variants"] >= 1)
+    card = next((c for c in report["cards"] if c["measured_metric"] == "t50_celsius"), None)
+    step("a card exists for the imported metric", card is not None)
+    step("the rank statistic is reported over more than one variant",
+         card["spearman"] is not None and card["n"] >= 4,
+         f"n={card['n']}, rho={card['spearman']:.4f}" if card["spearman"] is not None else "none")
+    # The important one. A ddG in kcal/mol and a T50 in degrees Celsius are not
+    # the same quantity, so no absolute error between them is computed, and the
+    # reason travels with the card rather than leaving a blank.
+    step("no error term is invented across unlike units", card["mae"] is None)
+    step("and no bias term either", card["mean_signed_error"] is None)
+    step("the reason is on the card, not absent",
+         len(card["error_unavailable_reason"]) > 0)
+    step("and it names both units",
+         card["predicted_unit"] in card["error_unavailable_reason"]
+         and card["measured_unit"] in card["error_unavailable_reason"],
+         card["error_unavailable_reason"][:80])
+    step("no calibration curve is drawn across unlike units",
+         card["calibration"] == [])
+    step("the card names the weights its numbers came from",
+         len(card["weights_hash"]) > 0)
+    step("a synthetic predictor's card says so", card["is_mock"] is True)
+
+    section("Phase 8: where the units do match, error and bias are reported")
+    # The same predictor's own metric and unit, so the two series are genuinely
+    # commensurable. This is the path the unit gate exists to permit.
+    ddg_rows = "\n".join(
+        f"{row['code']},{row['cells'][0]['value'] + 2.0:.4f}"
+        for row in ranking["rows"][:24]
+        if row["cells"] and row["cells"][0]["metric"] == "ddg_kcal_per_mol"
+    )
+    if ddg_rows:
+        status, commensurable = call(
+            "POST",
+            f"/targets/{target_id}/measurements",
+            {
+                "text": "mutant,ddg\n" + ddg_rows,
+                "mapping": {"label": "mutant", "value": "ddg", "sd": None, "replicate": None},
+                "assay": "thermal_stability",
+                "metric": "ddg_kcal_per_mol",
+                "unit": "kcal/mol",
+                "higher_is_better": False,
+                "offset": None,
+                "source_note": f"verify_gates {stamp}: synthetic, +2.00 kcal/mol by construction",
+            },
+            retry_safe=False,
+        )
+        step("commensurable measurements import", status == 201,
+             f"{commensurable['joined']} joined")
+
+        _, report2 = call("GET", f"/targets/{target_id}/scorecard")
+        ddg_card = next(
+            (c for c in report2["cards"]
+             if c["measured_metric"] == "ddg_kcal_per_mol"
+             and c["predicted_metric"] == "ddg_kcal_per_mol"),
+            None,
+        )
+        step("a card exists for the matching unit", ddg_card is not None)
+        step("MAE is reported in the shared unit",
+             ddg_card["mae"] is not None and ddg_card["error_unit"] == "kcal/mol",
+             f"MAE {ddg_card['mae']:.2f} kcal/mol")
+        step("the bias term is reported beside it",
+             ddg_card["mean_signed_error"] is not None,
+             f"bias {ddg_card['mean_signed_error']:+.2f} kcal/mol")
+        # The claim ARCHITECTURE.md §13 rests on, asserted end to end: a series
+        # offset by a constant scores a perfect rank and is caught only by bias.
+        step("a constant offset is invisible to rank",
+             abs(ddg_card["spearman"] - 1.0) < 1e-9,
+             f"rho {ddg_card['spearman']:.4f}")
+        step("and is caught exactly by the bias term",
+             abs(ddg_card["mean_signed_error"] + 2.0) < 0.01,
+             f"{ddg_card['mean_signed_error']:+.4f} kcal/mol against a built-in -2.00")
+        step("the bias states its own sign convention",
+             "Predicted minus measured" in ddg_card["bias_note"])
+        step("a calibration curve is drawn when the units match",
+             len(ddg_card["calibration"]) > 0,
+             f"{len(ddg_card['calibration'])} bins")
+
+    section("Phase 8: the seeded deep mutational scan is real and joined")
+    _, projects = call("GET", "/projects")
+    seeded = next(
+        (p for p in projects if p["name"] == "Lipase A thermostability, measured"), None
+    )
+    step("the seeded validation-loop project exists", seeded is not None)
+    if seeded is not None:
+        _, experiments = call("GET", f"/projects/{seeded['id']}/experiments")
+        step("it carries one imported experiment", len(experiments) == 1)
+        dms = experiments[0]
+        step("with the whole deep mutational scan", dms["total"] == 2172,
+             f"{dms['total']} measured values")
+        step("every row joined to a variant", dms["unjoined"] == 0,
+             f"{dms['joined']} joined")
+        step("the values are temperatures, and say so", dms["unit"] == "°C")
+        step("the direction was stated, not inferred", dms["higher_is_better"] is True)
+        step("and the source is cited", "10.1021/acs.jcim.9b00954" in (dms["source_note"] or ""),
+             (dms["source_note"] or "")[:60])
+
+    section("Phase 8: the scorecard screen serves")
+    page = fetch_html(f"{WEB}/targets/{target_id}/scorecard")
+    step("the scorecard screen serves this target", "Predictor scorecard" in page)
+    step("the rank statistic is on the page", "Spearman" in page)
+    # ARCHITECTURE.md §13: the bias term is adjacent to the rank term, never in a
+    # detail panel or behind a tab. If it is on the page at all it is in the row.
+    step("the bias term is on the page beside it", "Mean signed error" in page)
+    step("the error term is on the page", "MAE" in page)
+    step("an uncomputable error explains itself on the page",
+         "not the same quantity" in page)
+    step("and says what a rank statistic alone does not establish",
+         "not whether the numbers are" in page)
+
+    section("Phase 8: the intake screen serves")
+    page = fetch_html(f"{WEB}/targets/{target_id}/measurements")
+    step("the intake screen serves", "Import measured results" in page)
+    step("it says nothing is written until the preview is confirmed",
+         "Nothing is written until" in page)
+
+    section("Phase 8: a variant in a superseded scheme cannot take a measurement")
+    # Deliberately last, because it changes this target's canonical scheme.
+    #
+    # A target keeps the variant rows an earlier scheme produced — they have
+    # scores hanging off them, so nothing deletes them — and under a new scheme
+    # those rows name residues the target no longer agrees with. Joining an
+    # upload to one would file a bench measurement against the wrong residue,
+    # which HANDOFF.md §8 records as the most expensive error class here. This
+    # asserts the join excludes them, by creating the condition rather than
+    # assuming it never arises: every variant so far is written in the mature
+    # scheme, so confirming the full-length scheme makes all of them stale.
+    _, target = call("GET", f"/targets/{target_id}")
+    full_length = next(
+        s for s in target["numbering_schemes"] if s["kind"] == "sequence"
+    )
+    status, reschemed = call(
+        "POST", f"/targets/{target_id}/numbering/confirm", {"scheme_id": full_length["id"]}
+    )
+    step("the canonical scheme can be changed", status == 200
+         and reschemed["canonical_scheme_label"] == full_length["label"],
+         reschemed["canonical_scheme_label"])
+
+    status, after = call(
+        "POST",
+        f"/targets/{target_id}/measurements/preview",
+        # `S77A` was a legitimate code a moment ago. Under the full-length
+        # scheme, position 77 is not S, so it must no longer join to anything.
+        {"text": "mutant,T50\nS77A,48.6", "mapping": mapping, "offset": None},
+    )
+    step("variants written in the superseded scheme are excluded",
+         after["stale_variants"] > 0, f"{after['stale_variants']} excluded")
+    step("a code that was valid under the old scheme no longer joins",
+         after["joined"] == 0, after["rows"][0]["detail"])
+    # Either refusal is correct and which one depends on whether any variant
+    # survived the exclusion at that label: `wild_type_mismatch` when one did,
+    # `unknown_position` when none did. What must hold is that the message names
+    # the scheme it is refusing under, so the reader can see *which* numbering
+    # made the code wrong.
+    step("and the refusal names the scheme it refused under",
+         after["rows"][0]["outcome"] in {"wild_type_mismatch", "unknown_position"}
+         and reschemed["canonical_scheme_label"] in after["rows"][0]["detail"],
+         after["rows"][0]["outcome"])
+
     print()
     if failures:
         print(f"{failures} gate check(s) FAILED.")

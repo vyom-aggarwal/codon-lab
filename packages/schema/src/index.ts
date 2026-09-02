@@ -696,3 +696,180 @@ export const stackResultSchema = z.object({
 })
 
 export type StackResult = z.infer<typeof stackResultSchema>
+
+/* -------------------------------------------------------------------------- */
+/* Phase 8 — results intake and the scorecard                                  */
+/* -------------------------------------------------------------------------- */
+
+export const columnMappingSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  sd: z.string().nullable().default(null),
+  replicate: z.string().nullable().default(null),
+})
+
+export type ColumnMapping = z.infer<typeof columnMappingSchema>
+
+export const inspectSchema = z.object({
+  headers: z.array(z.string()),
+  /** `,` or a tab. Shown because a file split on the wrong character produces
+   * one enormous column, which is otherwise puzzling rather than obvious. */
+  delimiter: z.string(),
+  row_count: z.number().int(),
+  columns: z.array(z.object({ name: z.string(), sample: z.array(z.string()) })),
+  /** Null when nothing in the headers looked like a mutation code and a value.
+   * Never a blind guess at the first two columns. */
+  suggested: columnMappingSchema.nullable(),
+})
+
+export type Inspect = z.infer<typeof inspectSchema>
+
+export const previewRowSchema = z.object({
+  index: z.number().int(),
+  raw_label: z.string(),
+  value: z.number(),
+  sd: z.number().nullable(),
+  replicate: z.number().int().nullable(),
+  outcome: z.string(),
+  code: z.string().nullable(),
+  hgvs: z.string().nullable(),
+  detail: z.string(),
+})
+
+export type PreviewRow = z.infer<typeof previewRowSchema>
+
+const shiftedRowSchema = z.object({
+  index: z.number().int(),
+  raw_label: z.string(),
+  code: z.string(),
+})
+
+/**
+ * A numbering shift the product found but has not applied. Offered for the user
+ * to accept or reject; `explained_without_variant` is present so the proposal
+ * cannot overstate what accepting it repairs.
+ */
+export const offsetProposalSchema = z.object({
+  offset: z.number().int(),
+  witnesses: z.number().int(),
+  would_join: z.array(shiftedRowSchema),
+  explained_without_variant: z.array(shiftedRowSchema),
+})
+
+export type OffsetProposal = z.infer<typeof offsetProposalSchema>
+
+export const measurementPreviewSchema = z.object({
+  scheme_label: z.string(),
+  delimiter: z.string(),
+  headers: z.array(z.string()),
+  rows: z.array(previewRowSchema),
+  total_rows: z.number().int(),
+  joined: z.number().int(),
+  unjoined: z.number().int(),
+  problems: z.array(z.object({ index: z.number().int(), detail: z.string() })),
+  outcome_counts: z.record(z.string(), z.number()),
+  offset: offsetProposalSchema.nullable(),
+  /** Never blank alongside a null `offset`: "we found nothing" and "we did not
+   * look" are different answers and the interface shows which one happened. */
+  offset_note: z.string(),
+  stale_variants: z.number().int(),
+})
+
+export type MeasurementPreview = z.infer<typeof measurementPreviewSchema>
+
+export const importResultSchema = z.object({
+  experiment_id: z.string().uuid(),
+  written: z.number().int(),
+  joined: z.number().int(),
+  unjoined: z.number().int(),
+  problems: z.array(z.object({ index: z.number().int(), detail: z.string() })),
+})
+
+export type ImportResult = z.infer<typeof importResultSchema>
+
+export const experimentSchema = z.object({
+  id: z.string().uuid(),
+  assay: z.string(),
+  metric: z.string(),
+  unit: z.string(),
+  /** Null when the import never stated which way the assay points. The
+   * scorecard then reports that it cannot rank, rather than guessing. */
+  higher_is_better: z.boolean().nullable(),
+  source_note: z.string().nullable(),
+  protocol: z.string().nullable(),
+  operator: z.string().nullable(),
+  performed_on: z.string().nullable(),
+  total: z.number().int(),
+  joined: z.number().int(),
+  unjoined: z.number().int(),
+})
+
+export type Experiment = z.infer<typeof experimentSchema>
+
+export const experimentListSchema = z.array(experimentSchema)
+
+export const scatterPointSchema = z.object({
+  code: z.string(),
+  hgvs: z.string(),
+  predicted: z.number(),
+  measured: z.number(),
+  /** How many measured rows were averaged into this point. */
+  replicates: z.number().int(),
+})
+
+export type ScatterPoint = z.infer<typeof scatterPointSchema>
+
+/**
+ * One predictor's record against one set of measurements.
+ *
+ * ARCHITECTURE.md §13: a rank statistic never stands alone. `mae` and
+ * `mean_signed_error` are always present as fields, and whenever they are null
+ * `error_unavailable_reason` is non-empty — so there is no shape of this object
+ * in which a client holds a Spearman coefficient and nothing telling it whether
+ * the absolute error was knowable.
+ */
+export const scorecardSchema = z.object({
+  model_id: z.string(),
+  model_name: z.string(),
+  model_version: z.string(),
+  weights_hash: z.string(),
+  model_version_id: z.string().uuid(),
+  is_mock: z.boolean(),
+  predicted_metric: z.string(),
+  predicted_unit: z.string(),
+  predicted_sign: z.string(),
+  measured_metric: z.string(),
+  measured_unit: z.string(),
+  measured_sign: z.string(),
+  n: z.number().int(),
+  /** Oriented so +1 means the predictor and the bench agree about quality. */
+  spearman: z.number().nullable(),
+  precision_k: z.number().int(),
+  precision: z.number().nullable(),
+  precision_note: z.string(),
+  mae: z.number().nullable(),
+  mean_signed_error: z.number().nullable(),
+  error_unit: z.string().nullable(),
+  bias_note: z.string(),
+  error_unavailable_reason: z.string(),
+  calibration: z.array(
+    z.object({ predicted: z.number(), measured: z.number(), count: z.number() }),
+  ),
+  points: z.array(scatterPointSchema),
+  targets: z.array(z.string()),
+})
+
+export type Scorecard = z.infer<typeof scorecardSchema>
+
+export const scorecardReportSchema = z.object({
+  cards: z.array(scorecardSchema),
+  /** Why there is nothing to show, when there is nothing. Never an empty screen
+   * with no explanation. */
+  note: z.string(),
+  measured_variants: z.number().int(),
+  unjoined_measurements: z.number().int(),
+  metrics: z.array(z.string()),
+  is_demo: z.boolean(),
+})
+
+export type ScorecardReport = z.infer<typeof scorecardReportSchema>

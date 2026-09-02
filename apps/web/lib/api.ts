@@ -4,7 +4,11 @@ import {
   designSetListSchema,
   designSetSchema,
   designSetSummarySchema,
+  experimentListSchema,
   filteredSchema,
+  importResultSchema,
+  inspectSchema,
+  measurementPreviewSchema,
   goalListSchema,
   goalSchema,
   metaSchema,
@@ -16,6 +20,7 @@ import {
   runDiffSchema,
   runListSchema,
   runSchema,
+  scorecardReportSchema,
   stackResultSchema,
   sequenceTrackSchema,
   suggestionListSchema,
@@ -23,8 +28,13 @@ import {
   type Constraint,
   type ConstraintKind,
   type DesignSet,
+  type ColumnMapping,
   type DesignSetSummary,
+  type Experiment,
   type Filtered,
+  type ImportResult,
+  type Inspect,
+  type MeasurementPreview,
   type Goal,
   type GoalSpec,
   type Meta,
@@ -35,6 +45,8 @@ import {
   type Reconciliation,
   type Run,
   type RunDiff,
+  type Scorecard,
+  type ScorecardReport,
   type SequenceTrack,
   type StackResult,
   type Suggestion,
@@ -395,3 +407,59 @@ export async function removeDesignMember(
     )
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Phase 8 — results intake and the scorecard                                  */
+/* -------------------------------------------------------------------------- */
+
+/** Read a pasted or uploaded table's headers. Writes nothing. */
+export function inspectMeasurements(targetId: string, text: string): Promise<Inspect> {
+  return send(`/targets/${targetId}/measurements/inspect`, { text }, inspectSchema)
+}
+
+/**
+ * What an import would do, without doing it.
+ *
+ * `offset` is null until the user accepts a proposed numbering shift. Nothing
+ * applies one on their behalf — the proposal is returned, shown, and accepted
+ * or rejected explicitly.
+ */
+export function previewMeasurements(
+  targetId: string,
+  body: { text: string; mapping: ColumnMapping; offset: number | null },
+): Promise<MeasurementPreview> {
+  return send(`/targets/${targetId}/measurements/preview`, body, measurementPreviewSchema)
+}
+
+export function importMeasurements(
+  targetId: string,
+  body: {
+    text: string
+    mapping: ColumnMapping
+    assay: string
+    metric: string
+    unit: string
+    /** Required. Which direction is a better result is a fact about the assay
+     * that only the person who ran it knows, so the form has no default. */
+    higher_is_better: boolean
+    offset: number | null
+    source_note: string | null
+  },
+): Promise<ImportResult> {
+  return send(`/targets/${targetId}/measurements`, body, importResultSchema)
+}
+
+export function fetchExperiments(projectId: string): Promise<Experiment[]> {
+  return request(`/projects/${projectId}/experiments`, experimentListSchema)
+}
+
+export function fetchTargetScorecard(targetId: string): Promise<ScorecardReport> {
+  return request(`/targets/${targetId}/scorecard`, scorecardReportSchema)
+}
+
+/** The persistent scorecard, pooled across every target the lab has measured. */
+export function fetchLabScorecard(): Promise<ScorecardReport> {
+  return request('/scorecard', scorecardReportSchema)
+}
+
+export type { Scorecard }

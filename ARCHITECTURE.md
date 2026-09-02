@@ -908,3 +908,116 @@ its threshold with it, not share one.
 calibrated on the empirical scale, in which case the kit's own formula is correct
 *for that kit* and gets registered beside this one rather than replacing it —
 exactly as §14.1 leaves room for a second ESM-2 checkpoint.
+
+---
+
+## 17. Results intake and the scorecard
+
+Phase 8. `BRIEF.md` §2.3 calls the validation loop "the entire moat", and §5.9
+specifies it: upload measured values, map the columns with a preview, fuzzy-join
+to variants by mutation code with manual override, then predicted-vs-measured,
+Spearman ρ, precision@10, a calibration curve, and a persistent scorecard.
+
+The arithmetic and the join rules are pure and live in `domain/scorecard` and
+`domain/joining`; `services/measurements` is orchestration only, and
+`routes/measurements` is the HTTP surface. The layering rule in §3 is unchanged.
+
+### 17.1 Delegated decisions: the join
+
+The fuzzy-join thresholds were the open scientific decision blocking this phase.
+They were put to the owner on 2026-09-01 and **delegated back**, the same pattern
+§14 and §16.1 record. Each is written down with what would change it.
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| **What counts as a match** | Exact agreement on wild-type residue, position **and** mutant residue, after normalising notation (`A123V`, `p.Ala123Val`, `H100AY`, and `/`-, `,`- or `+`-separated sets) | `A123V` and `A123L` are edit-distance 1 and are different experiments. Any similarity threshold would eventually attribute a bench measurement to a variant that did not produce it, which is worse than leaving the row unjoined, because an unjoined row is visible. There is no cutoff in the module that could be set wrong. |
+| **A wild-type mismatch** | Never joins, and is held back as evidence rather than warned through | A *systematic* wild-type mismatch is what a numbering-scheme shift looks like. Consuming it as a per-row warning discards the signal needed to diagnose the whole file — and mutation codes written in the wrong scheme are the most expensive error class in this application (`HANDOFF.md` §8). |
+| **When a numbering shift is proposed** | Only when one constant offset explains **every** unplaced row that can testify, and **no other offset does** | Deliberately the same shape as `numbering.reconcile`, which returns `NEEDS_ALIGNMENT` and stops rather than choosing among candidates. A scheme shift is a systematic transform, so "explains most rows" is not a weaker version of the right answer — it is evidence that this is not a scheme shift. **This is what removes the threshold the question was about:** there is no "fraction of rows that must agree" constant, because unanimity is not a tuneable number. It also handles the single-row case for free — one row is explained by many offsets, so uniqueness fails and nothing is proposed. |
+| **Applying a shift** | Never automatic. Returned as a proposal with its evidence, including the rows it would *not* fix | A proposal that overstates what it repairs is one the user cannot weigh. `raw_label` keeps the file's own notation either way, so accepting a shift never overwrites what the user wrote. |
+| **Replicates** | Averaged per (variant, metric) before pairing, with the count carried | A variant measured eight times would otherwise outvote the rest of the plate in the MAE and appear eight times in a top-k. The mean is stated wherever the number is shown. |
+
+*What would change these:* an owner instruction naming a similarity function and
+its cutoffs, which would then be implemented as specified. Nothing observed in
+the data would change them — a permissive join fails silently, so no amount of
+usage evidence argues for one.
+
+### 17.2 A variant in a superseded numbering scheme cannot take a measurement
+
+The load-bearing consequence, and it was found by running the join against this
+machine's real database rather than by reasoning about it.
+
+A target keeps the `Variant` rows an earlier canonical scheme produced. Nothing
+deletes them, correctly — they have `Score` rows hanging off them, and deleting
+those would break the provenance trail §5 exists to protect. But under a new
+canonical scheme those rows name residues the target no longer agrees with. On
+the seeded lipase, `S108A` is such a row: under the confirmed mature-protein
+scheme, label 108 is L, and the substitution that row actually means is called
+`S77A`.
+
+Joining an uploaded `S108A` to it would file a bench measurement against a
+residue 31 positions from the one it was made on. The join therefore admits only
+variants whose `(wild, label)` agrees with the target's **current** canonical
+scheme, and reports how many it excluded rather than filtering silently. On the
+real database that was 4,446 rows on one target and 3,274 on another.
+
+This is the §9 numbering rule reaching a surface that did not exist when it was
+written. Any future surface that resolves a mutation code against stored variants
+needs the same check.
+
+### 17.3 The scorecard reports rank, error and bias, or says why it cannot
+
+§13 binds this section and is not restated here. Two gates decide whether an
+absolute error is computed at all, and both return a stated reason rather than a
+number:
+
+- **Units must match**, compared literally. There is no conversion table,
+  because a table is a place to put a factor and a wrong factor is invisible in
+  the output — it produces a plausible MAE rather than a refusal. `BRIEF.md` §7
+  forbids claiming a Tm shift in °C from a ΔΔG prediction, and this is where that
+  is enforced for every future metric rather than for that one pair.
+- **Sign conventions must match.** A predictor reporting destabilizing-positive
+  and an upload reporting higher-is-better give the same physical outcome
+  opposite signs; subtracting them yields an error that is an artefact of
+  notation. The product does **not** negate one series to make them agree.
+
+Rank statistics survive both gates, because a rank needs an order and not a
+unit — but they never appear alone. `scorecard.build` is the only entry point,
+it always computes the error terms when they are computable, and it always
+carries `commensurability.reason` when they are not. `scorecard.test.tsx`
+asserts from the rendered DOM that the bias figure sits in the same `<dl>` as the
+rank figures, so moving it behind a tab fails the build.
+
+`Experiment.higher_is_better` is nullable with **no default**, for the same
+reason: which direction is a better result is a fact about the assay that only
+the person who ran it knows. Null means it was never stated, and the card reports
+that it cannot rank rather than guessing.
+
+### 17.4 A scorecard is keyed on a model version, and accumulates by pooling
+
+Two weight hashes are two different predictors as far as a provenance trail is
+concerned, so a card pooling them would be a card about neither.
+
+The persistent, cross-project scorecard §5.9 asks for is built by pooling the
+underlying predicted/measured **pairs** and calling `build` once — never by
+averaging finished cards. Averaging two Spearman coefficients is not a Spearman
+coefficient of anything, and it would weight a card resting on six measurements
+equally with one resting on two thousand. `domain/scorecard.accumulate` exists
+solely to raise `NotImplementedError` with that explanation, at the place someone
+would reach for the shortcut.
+
+*Not implemented:* "per target **class**" from §5.9. The data model has no target
+taxonomy, so cards are per target or pooled across all of them, and a class would
+be an invented grouping. Filed as an open thread rather than approximated.
+
+### 17.5 Every uploaded row is written, joined or not
+
+`Measurement.variant_id` is nullable for exactly this reason, and both the seed
+and the import path rely on it. A row that could not be placed is stored with its
+`raw_label` intact and its outcome in `extra.join_outcome`, and stays resolvable
+by hand days later through `attach_variant`. A row silently dropped at import is
+a measurement the lab paid for and the product threw away.
+
+The one thing that is *not* written is a row whose value cell is not a finite
+number. Those are reported as problems, counted, and refused — the same rule
+`domain/hashing` applies to non-finite floats, for the same reason: they
+propagate through arithmetic and produce a scorecard that is quietly meaningless.

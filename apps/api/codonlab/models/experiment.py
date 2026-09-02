@@ -51,12 +51,35 @@ class DesignSetMember(TimestampedModel, table=True):
 
 
 class Experiment(TimestampedModel, table=True):
+    """One import of bench values: an assay, a protocol, and what it measured.
+
+    `higher_is_better` has no default on purpose. Which direction is a better
+    result is a fact about the assay that only the person who ran it knows — a
+    T50 in °C rises with stability, a ddG reported destabilizing-positive falls
+    with it — and every rank statistic on the scorecard needs it to orient
+    itself. Defaulting it would be inventing a sign convention. Null means it
+    was never stated, and the scorecard says it cannot rank rather than guessing.
+
+    The metric and unit live on `Measurement`, not here, so there is one answer
+    to what a row measured. See migration 0005.
+    """
+
     project_id: uuid.UUID = Field(foreign_key="project.id", index=True, nullable=False)
     design_set_id: uuid.UUID | None = Field(default=None, foreign_key="designset.id", index=True)
     assay: AssayKind = Field(index=True)
     protocol: str | None = Field(default=None)
     performed_on: date | None = Field(default=None)
     operator: str | None = Field(default=None)
+    higher_is_better: bool | None = Field(
+        default=None,
+        description="Whether a larger measured value is a better result. Stated by "
+        "the user at import; never inferred from the metric name.",
+    )
+    source_note: str | None = Field(
+        default=None,
+        description="Where these values came from — an uploaded file name, or the "
+        "citation of a published dataset.",
+    )
 
 
 class Measurement(TimestampedModel, table=True):

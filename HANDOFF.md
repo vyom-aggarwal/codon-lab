@@ -3,8 +3,9 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-**Status current as of 2026-09-01.** Phase 7's design set builder is committed on
-`main`; the wet-lab handoff is blocked and the blocker is named in §3 and §9.
+**Status current as of 2026-09-01.** Phase 8 is complete and committed on `main`.
+Phase 7's wet-lab handoff is still blocked and the blocker is named in §3 and §9;
+it is the only part of phases 1-8 that did not ship.
 
 > **The product is called Codon Lab.** It was renamed from CatalystAI on
 > 2026-09-01 — the code, the packages, the environment variables, the Postgres
@@ -42,10 +43,11 @@ colleague's notebook and never trusted enough to spend $4,000 of ordering budget
 on. The gap being closed is **trust**, not capability.
 
 It is a solo build by the repo owner (`vyom-aggarwal`), executed across multiple
-assistant sessions against a fixed nine-phase plan in `BRIEF.md` §9. **Phases 1–6
-of 9 are complete and committed. Phase 7 is two-thirds done:** the design set
-builder and the epistasis warnings ship; the wet-lab handoff exports do not, and
-are blocked on something the data model does not have (§3). Nothing is deployed;
+assistant sessions against a fixed nine-phase plan in `BRIEF.md` §9. **Phases 1–8
+of 9 are complete and committed**, with one exception: Phase 7's wet-lab handoff
+exports do not ship, and are blocked on something the data model does not have
+(§3). Phase 9 — Playwright smoke flows, the a11y pass, screenshots — is
+untouched apart from the README, which was pulled forward. Nothing is deployed;
 everything runs locally under Docker on the owner's Windows 11 machine.
 
 ---
@@ -113,8 +115,9 @@ to know.
 
 ### Works end to end, verified
 
-- **Phases 1–6 complete**, each with an exit gate asserted in
-  `scripts/verify_gates.py` (**162 checks**, over HTTP, against a live stack).
+- **Phases 1–8 complete**, each with an exit gate asserted in
+  `scripts/verify_gates.py` (**225 checks**, over HTTP, against a live stack).
+  Phase 7's wet-lab handoff is the one gap — §9.1.
 - **The Phase 7 design set builder works end to end.** Select variants into a set,
   stack them combinatorially, and every stacked design carries its 8 Å pair flags
   and its assumed-additive totals. Verified against the live stack: 6 combinations
@@ -141,10 +144,28 @@ to know.
 - **"Unavailable means unavailable" is proven end to end**, not just unit-tested:
   on that real run the target had no structure, so ThermoMPNN **skipped with its
   stated reason and produced nothing** rather than falling back.
-- **All local gates green**, re-run 2026-08-25 at the end of Phase 7: **336
-  pytest** (6 skipped), 127 vitest across 8 files, ruff clean, mypy strict clean
-  on **65 source files**, `pnpm typecheck` and `pnpm lint` clean, and **162 gate
-  checks with 0 failures** against the live stack.
+- **Phase 8 ships: results intake, the join, and the scorecard.** Verified on the
+  live stack against **real measured data** — 2,172 T50 values for the seeded
+  lipase from ProteinGym's `ESTA_BACSU_Nutschel_2020` (Nutschel et al. 2020).
+  Real ESM-2 650M scores against those measurements give **Spearman ρ = 0.30**,
+  where the synthetic predictor gives −0.06. That is the moat working.
+- **The join refuses to guess, and the refusal was measured, not asserted.** The
+  ProteinGym file is written in full-length numbering; the seeded project's
+  canonical scheme is the mature protein. Uploaded as-is, **100 of 2,172 rows
+  join and 1,745 report a wild-type mismatch**. The offset proposal finds −31,
+  unanimously across all 2,072 unplaced rows, proposes it without applying it,
+  and on acceptance joins 2,172 of 2,172. See §6 for why unanimity, not a
+  fraction.
+- **`ARCHITECTURE.md` §13 is now demonstrated end to end rather than argued.**
+  A predictor offset by a constant 2 kcal/mol scores **ρ = 1.0000 and
+  precision@10 = 1.00** and is caught only by the bias term at **−2.00
+  kcal/mol** — asserted over HTTP in the gate, and visible on the screen with
+  the calibration bins running parallel to the identity line.
+- **All local gates green**, re-run 2026-09-01 at the end of Phase 8: **396
+  pytest** passing (6 skipped, 1 expected failure — see §8), **145 vitest across
+  9 files**, ruff clean, mypy strict clean on **69 source files**,
+  `pnpm typecheck` and `pnpm lint` clean, and **225 gate checks with 0 failures**
+  against the live stack.
 
 ### Half-built
 
@@ -190,6 +211,21 @@ to know.
 - **A stale UI string.** `apps/web/app/runs/[id]/workbench/workbench.tsx:51`
   labels the conservation column `'Requires MSA (Phase 6)'`. Phase 6 shipped
   without an MSA provider, so the label now names the wrong phase.
+
+- **Targets carry variant rows written in numbering schemes they have since
+  abandoned, and nothing marks them stale.** Found during Phase 8 by running the
+  join against this machine's real database, not by reasoning. Changing a
+  target's canonical scheme does not touch the `Variant` rows an earlier scheme
+  produced — correctly, since they carry `Score` rows — so one seeded lipase
+  target holds **4,446** such rows and another **3,274**. Under the current
+  scheme they name different residues: `S108A` is a real row whose substitution
+  is called `S77A` today.
+
+  **Phase 8's join is immune to this** — it admits only variants whose
+  `(wild, label)` agrees with the current canonical scheme, and reports the
+  count it excluded (`ARCHITECTURE.md` §17.2, asserted in the gate). But the
+  rows are still there, and **any other surface that resolves a mutation code
+  against stored variants has the same exposure**. Open thread 11.
 
 ---
 
@@ -268,9 +304,14 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 | `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
 | `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
 | `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
-| `scripts/verify_gates.py`                         | 162 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
+| `scripts/verify_gates.py`                         | 225 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
 | `apps/api/codonlab/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
 | `apps/api/codonlab/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
+| `apps/api/codonlab/domain/joining.py`             | Matching bench rows to variants          | No similarity threshold anywhere. The offset proposal is unanimous-and-unique, so there is no fraction to set wrong |
+| `apps/api/codonlab/domain/scorecard.py`           | Spearman, precision@k, MAE, bias         | `build()` is the only entry point and always carries the error terms or the reason they are absent. `accumulate()` refuses the averaging shortcut by name |
+| `apps/api/codonlab/services/measurements.py`      | Intake, the join, the scorecard          | Holds `_known_variants`, which excludes variants written in a superseded numbering scheme. That check is load-bearing — §3 |
+| `apps/api/codonlab/data/proteingym/`              | 2,172 real measured T50 values           | Vendored with its SHA-256, its citation, and what it can and cannot demonstrate. Read by `seed.py`, never fetched at boot |
+| `apps/web/components/scorecard/scorecard-card.tsx`| Rank, error and bias in one row          | The shape is a contract, not a layout preference. `scorecard.test.tsx` asserts the adjacency from the DOM |
 
 ---
 
@@ -334,12 +375,21 @@ pip install -e ".[models]"       # torch + transformers, several GB
 ### Tests and gates
 
 ```powershell
-pnpm typecheck; pnpm lint; pnpm test              # 127 vitest across 8 files
-cd apps\api; .venv\Scripts\python -m pytest -q    # 336 pytest, 6 skipped (opt-in real-model)
-cd apps\api; .venv\Scripts\ruff check .           # clean
-cd apps\api; .venv\Scripts\mypy codonlab          # strict, clean, 60 files
-python scripts\verify_gates.py                    # 162 checks, needs the live stack
+pnpm typecheck; pnpm lint; pnpm test                   # 145 vitest across 9 files
+cd apps\api; .venv\Scripts\python -m pytest -q        # 396 pass, 6 skipped, 1 known fail
+cd apps\api; .venv\Scripts\python -m ruff check .     # clean
+cd apps\api; .venv\Scripts\python -m mypy codonlab    # strict, clean, 69 files
+python scripts\verify_gates.py                        # 225 checks, needs the live stack
 ```
+
+**Invoke the Python tools as `python -m <tool>`, not through
+`.venv\Scripts\<tool>.exe`.** A Windows Application Control policy on this
+machine blocks the pip-generated launcher executables — `pytest.exe`, `mypy.exe`
+and `alembic.exe` all fail with *"An Application Control policy has blocked this
+file"*. The venv's own `python.exe` runs fine, so `python -m` is the working
+path. This is a machine-level setting and not a broken install: the launchers
+carry the correct absolute path (checked 2026-09-01), and it is the same policy
+that blocked torch's DLLs in §8.
 
 Python tests are **hermetic** — no database, no network, no Redis. Anything that
 genuinely crosses Postgres is asserted in `verify_gates.py` instead, because that
@@ -396,6 +446,11 @@ trigger becomes folklore.
 | **Objectives stated per predictor** (§14.4)     | Inheriting `mock_fitness`'s seven would have a stability model answering a specificity question      | Evidence about a specific model's coverage         |
 | **Primer chemistry, four decisions** (§16.1)    | Delegated 2026-08-25. NN Tm (SantaLucia & Hicks 2004) via Biopython, Owczarzy salt corrections, Liu & Naismith layout, both duplexes reported | A lab whose kit calibrates its acceptance rule on the empirical scale |
 | **The 8 A pair distance convention** (§15)      | The brief fixes 8 A but not how it is measured; reused §11's already-settled minimum heavy-atom rule rather than inventing a second one | Owner preferring CA-CA, which flips real pairs |
+| **The join is exact, never fuzzy** (§17.1)      | `A123V` and `A123L` are edit-distance 1 and are different experiments, so any similarity cutoff eventually misattributes a real measurement | An owner instruction naming a similarity function and its cutoffs. No amount of usage evidence, since a permissive join fails silently |
+| **An offset is unanimous and unique, or absent** (§17.1) | A numbering shift is a systematic transform, so "explains most rows" is evidence it is *not* one. This is what removed the threshold the owner was asked about — unanimity is not a tuneable number | Owner stating a fraction, which would then be implemented as stated |
+| **Absolute error needs matching units *and* matching sign conventions** (§17.3) | A ddG in kcal/mol minus a T50 in °C is meaningless; opposed conventions make the error an artefact of notation. Neither is silently converted or negated | Nothing. Both are refusals to fabricate, not tunings |
+| **Replicates are averaged per variant before pairing** (§17.1) | A variant measured eight times would otherwise outvote the plate in the MAE and appear eight times in a top-k | An owner preferring the median, which is a one-line change and a stated choice either way |
+| **A scorecard is keyed on a model version** (§17.4) | Two weight hashes are two predictors in a provenance trail; a card pooling them is a card about neither | Nothing foreseeable |
 
 ESM-2 is offered for thermostability, activity, expression, solubility and
 binding affinity — and **deliberately refused** specificity and solvent
@@ -565,6 +620,29 @@ built around.
 - **A correlation test cannot discriminate a radii set.** See §6. This is the
   general form and it has bitten once already.
 
+- **A test whose fixture differs in two ways pins neither.** Found on Phase 8's
+  commensurability gate by mutating it. `test_a_ddg_and_a_temperature_are_not_commensurable`
+  uses a ΔΔG and a T50, which differ in **unit and in direction** — so deleting
+  the unit check entirely left the test passing, via the sign check, with an
+  assertion message that looked plausible. There is now a second test using an
+  ESM log-odds ratio and a T50, which are both higher-is-better and still not
+  subtractable, so the unit gate is pinned on its own. Look for this shape
+  wherever a fixture is "obviously" different.
+
+### Phase 8 mutation checks, and what they caught
+
+The working agreement asks for a mutation test wherever a test guards something
+expensive, and for the result to be recorded. All were run on 2026-09-01 and all
+were caught.
+
+| Mutation                                                             | Result |
+| -------------------------------------------------------------------- | ------ |
+| `domain/joining`: unanimity → "≥60% of rows agree"                    | Caught by `test_a_shift_that_explains_most_rows_is_not_proposed`. The failure output is the argument for the rule: the 60% version proposed −31 and would have silently reattributed `H99Y` to `H68Y`, a variant nobody measured |
+| `domain/scorecard`: unit gate deleted                                 | Caught, but at first by the *sign* assertion — see the trap above. Now caught by both |
+| `domain/scorecard`: sign-convention gate deleted                      | Caught by two tests |
+| `domain/scorecard`: `spearman` stops orienting by the measured series | Caught by two tests |
+| `scorecard-card.tsx`: bias figure moved out of the rank `<dl>`        | Caught by four tests. This is the `ARCHITECTURE.md` §13 contract; closing the list early fails the build |
+
 ### Environment dead ends
 
 - **Frame rate cannot be measured from an agent session, at all.** The browser
@@ -633,7 +711,7 @@ built around.
   the deletion** — they live in Docker's own storage, not the project folder —
   so `codon-lab_postgres-data` still holds the 4,028 real ESM-2 scores, and
   `catalyst-ai_postgres-data` is still the pre-rename backup. Verified after the
-  restore: 162/162 gate checks.
+  restore: 162/162 gate checks — the count at that date; it is 225 as of Phase 8.
 - **The Postgres role and database were renamed in place**, not recreated: the
   volume holds 4,028 real ESM-2 scores that cost ~56 minutes of CPU. Renaming a
   role does **not** carry its password across, which is the trap — the role
@@ -674,93 +752,164 @@ UPDATE run SET status='CANCELLED', error='abandoned' WHERE status='RUNNING';
 
 ## 9. Open threads
 
-Ranked by priority.
+Ranked by priority. **Phase 8 closed the fuzzy-join question** — the owner
+delegated it back on 2026-09-01 and the answer is recorded in
+`ARCHITECTURE.md` §17.1 with what would change it.
 
-1. **The wet-lab handoff has no template DNA to design against.** The highest
-   thing on this list, because it is the only one that blocks a whole screen.
-   `BRIEF.md` §5.8 assumes site-directed mutagenesis primers are designable; the
-   data model has no DNA and neither seeded target has any. A primer anneals to
-   the construct actually on the bench, so this cannot be worked around by
-   back-translating the protein — that would produce a plausible sequence that is
-   not the user's plasmid. Needs an owner decision on **where the coding sequence
-   comes from**: pasted by the user, fetched from ENA/EMBL by cross-reference, or
-   read off an uploaded plasmid map. Everything else about the handoff is already
-   decided (`ARCHITECTURE.md` §16.1). The refusal is built and states both reasons.
-2. **Open scientific decisions — ask the owner, never decide.**
-   - **Fuzzy-join thresholds** matching bench measurements to variants — blocks
-     Phase 8. Still open.
-   - *Settled 2026-08-25:* the primer Tm algorithm and its parameters. Put to the
-     owner, delegated back, and recorded in `ARCHITECTURE.md` §16.1 with what
-     would change each — the standing pattern for a delegated decision.
-3. **The `JOB_TIMEOUT_SECONDS` conflict needs an owner decision.** 3600s is 93%
-   consumed by a 212-residue target; the seeded 550-residue luciferase would be
-   killed. Raising the cap is one option, making the scoring stage resumable is
-   the better one. **Do not edit the constant quietly.** Raised again 2026-08-25
-   and still unanswered.
-4. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
-   interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give. It
-   reports `reports_interval=False` with the reason stated rather than dressing a
-   benchmark RMSE as a per-variant interval. Phase 7 added a second instance: a
-   stacked design has no interval either, and `AdditiveEstimate.interval_note`
-   says so rather than inventing one (`ARCHITECTURE.md` §15). Owner's call how to
-   resolve. Raised again 2026-08-25, still open.
-5. **Nobody has looked at a single screen.** `BRIEF.md` §4 is emphatic about how
-   this must look, and that judgement has never been made. Ask the owner to open
-   <http://localhost:3000> — this should happen well before Phase 9. Phase 7 added
-   two more unlooked-at screens (the design set list and the builder).
-6. **There is no UI for the cost basis.** `domain/costing` reads unit prices from
-   `Project.settings.cost_basis` and there is no way to set them, so the budget
-   panel always shows its reason rather than a total. Deliberate that it refuses
-   to invent a price; not deliberate that there is no way to supply one.
-7. **Frame rate is still unmeasured**, by design. When the owner runs it, record
+1. **The wet-lab handoff has no template DNA to design against.** Still the top
+   of this list, and now the only thing standing between the build and a
+   complete `BRIEF.md` §5. `BRIEF.md` §5.8 assumes site-directed mutagenesis
+   primers are designable; the data model has no DNA and neither seeded target
+   has any. A primer anneals to the construct actually on the bench, so this
+   cannot be worked around by back-translating the protein — that would produce
+   a plausible sequence that is not the user's plasmid.
+
+   **The owner delegated this on 2026-09-01 along with the Phase 8 question.**
+   The decision taken, and recorded here rather than in `ARCHITECTURE.md`
+   because nothing is built yet: **the coding sequence is pasted by the user**,
+   stored on a new `Target.coding_sequence`, and validated by translating it and
+   asserting it matches the protein already stored. It is the only source that
+   is genuinely the construct on the bench, which is the whole point of the
+   screen. ENA/EMBL cross-reference was rejected because it returns the
+   *reference* CDS — usually codon-optimised differently and often tagged — and
+   primers designed against it may not anneal to the user's plasmid; if it is
+   ever added it must be badged reference-derived and not trusted for ordering.
+
+   **Nothing is implemented.** The column, the translation validator, the paste
+   UI and the primer designer are all still to build. `ARCHITECTURE.md` §16.1
+   already holds the primer chemistry. Start with the validator: it is the
+   valuable half and it is testable before the attachment UI exists.
+
+2. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
+   interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give, and a
+   stacked design has none either. Raised three times; **delegated back on
+   2026-09-01** with the rest. The decision taken: **keep refusing and state the
+   absence** — `reports_interval=False` with its reason, and
+   `AdditiveEstimate.interval_note` for stacked totals. A benchmark RMSE dressed
+   as a per-variant interval is a fabricated number wearing a real one's
+   appearance, and it would render identically to a real interval on screen.
+
+   This leaves `BRIEF.md` §7's requirement **formally unmet, visibly**, which is
+   the honest state rather than a papered-over one. Phase 8 opens a real route
+   to closing it: once the scorecard accumulates enough measurements, the
+   residual spread per predictor per target class *is* an empirically grounded
+   interval. That needs an owner decision on the minimum n before a band is
+   shown, and it is not built.
+
+3. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
+   The lipase used 93% of it; the seeded luciferase (P08659) needs ~142 min at
+   the observed rate. **Delegated back on 2026-09-01.** The decision taken:
+   **make the scoring stage resumable** rather than raising the cap, which is
+   what `ARCHITECTURE.md` §14.1 already names as the better fix. **Not
+   implemented** — it is real work in `services/runs`, it was outside Phase 8's
+   scope, and the constant has deliberately not been edited in the meantime. Do
+   this before anyone runs a large target.
+
+4. **Nobody has looked at a single screen with a human eye.** `BRIEF.md` §4 is
+   emphatic about how this must look and that judgement has never been made.
+   Phase 8 added two more unlooked-at screens (results intake, the scorecard).
+   The assistant has now driven both in a real browser and they render
+   correctly — the scorecard's four-figure row, the offset proposal panel, the
+   calibration curve — but *correct* and *good* are different claims and only
+   the first has been checked. Ask the owner to open <http://localhost:3000>.
+   This should happen before Phase 9.
+
+5. **"Per target class" in the scorecard is unimplemented.** `BRIEF.md` §5.9
+   asks for a scorecard "per predictor per target class". The data model has no
+   target taxonomy, so cards are per target or pooled across all targets, and a
+   class would be an invented grouping. `ARCHITECTURE.md` §17.4. Needs either a
+   `Target.class` the user sets, or an owner decision that pooled-across-targets
+   is what was meant.
+
+6. **Stale variants exist on real targets and only the join is defended.**
+   Changing a target's canonical scheme leaves behind `Variant` rows written in
+   the old one — 4,446 on one seeded target, 3,274 on another (§3). Phase 8's
+   join excludes them and says so, but the rows are still there and any other
+   surface that resolves a mutation code against stored variants has the same
+   exposure. Options: mark them on the row, or refuse to change a canonical
+   scheme once variants exist. Both are owner decisions about a real trade-off.
+
+7. **There is no UI for the cost basis.** `domain/costing` reads unit prices
+   from `Project.settings.cost_basis` and there is no way to set them, so the
+   budget panel always shows its reason rather than a total. Deliberate that it
+   refuses to invent a price; not deliberate that there is no way to supply one.
+
+8. **The seeded scorecard demonstrates the rank path and the refusal path, not
+   the error path.** The vendored ProteinGym measurements are T50 in °C, which
+   is not commensurable with any predictor's metric, so MAE and bias correctly
+   read `—` on the seeded data. Exercising them with *real* measured numbers
+   needs a measured ΔΔG in kcal/mol; no public dataset was seeded for it because
+   none was found whose quantity could be verified to mean the same thing as
+   ThermoMPNN's ΔΔG. The path is covered hermetically and in the gate with
+   constructed values. See `apps/api/codonlab/data/proteingym/README.md`.
+
+9. **Frame rate is still unmeasured**, by design. When the owner runs it, record
    it here as user-verified with a date. The case to look at is **scrolling the
-   table while Mol\* is mounted and holding a WebGL context** — the realistic
-   worst case, since the viewer is live on every selected row.
-8. **Two real predictors have never scored the same run.** The one real end-to-end
-   run used a structureless target, so ThermoMPNN skipped. The disagreement
-   column — the signal `BRIEF.md` §6 is built around — has never been observed
-   with real numbers. Needs a target that has a structure.
-9. **The containerised real-provider path is unverified.** Build the image with
-   `[models]` and run the opt-in gate section (`CODONLAB_GATE_REAL_MODELS=1`).
-10. **`ESMScorer` lets a runtime failure escape as `OSError`.** Surfaced when a
-    Windows policy blocked torch's DLLs (§8): `available()` said yes, then
-    `score()` raised `OSError` instead of `PredictorUnavailableError`. A
+   table while Mol\* is mounted and holding a WebGL context**.
+
+10. **Two real predictors have never scored the same run.** The one real
+    end-to-end run used a structureless target, so ThermoMPNN skipped. The
+    disagreement column has never been observed with real numbers. Needs a
+    target that has a structure. Phase 8 raises the stakes: with both real
+    predictors on one run, the scorecard could compare them against the 2,172
+    seeded measurements directly.
+
+11. **The containerised real-provider path is unverified.** Build the image with
+    `[models]` and run the opt-in gate section (`CODONLAB_GATE_REAL_MODELS=1`).
+
+12. **`ESMScorer` lets a runtime failure escape as `OSError`.** `available()`
+    says yes, then `score()` raises instead of `PredictorUnavailableError`. A
     predictor whose runtime is installed but unloadable should report itself
-    unavailable with the reason, which is what the pipeline already knows how
-    to handle. Independent of that machine's policy.
-11. **`Variant.region` is dead weight** — populate it deliberately or drop it.
-    Phase 7 gave the column a second reader to think about: a stacked variant has
-    no single position, and its `features` carries `sequence_positions` instead.
-12. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
-13. **Alignment identity-scoring was never re-confirmed** by the owner
+    unavailable with the reason, which is what the pipeline already handles.
+    This is the cause of the one expected pytest failure (§8).
+
+13. **`Variant.region` is dead weight** — populate it deliberately or drop it.
+
+14. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
+
+15. **Alignment identity-scoring was never re-confirmed** by the owner
     (`ARCHITECTURE.md` §9).
-14. **The Claude goal parser has never run against the live API.** No
+
+16. **The Claude goal parser has never run against the live API.** No
     `ANTHROPIC_API_KEY` is configured, so every parse falls back to the rule
-    parser and is badged as such. Failure branches are covered hermetically
-    against a fake client. Do not describe it as working until it has been called.
-15. **A cold clone has never been tested.** `docker compose up` has only ever run
-    on a machine that already had images and a populated database.
+    parser and is badged as such. Do not describe it as working until it has
+    been called.
+
+17. **A cold clone has never been tested.** `docker compose up` has only ever
+    run on a machine that already had images and a populated database. Phase 8
+    adds a new reason to care: the seed now creates a target, 4,028 variants and
+    2,172 measurements on first boot, and that path has only been exercised
+    against an already-migrated database.
 
 ---
 
 ## 10. Immediate next steps
 
 1. **Verify the gates before changing anything.** `docker compose up -d`, then
-   `python scripts/verify_gates.py` (**162 checks**). Also run the per-package
-   gates in §5. If anything is red, **stop and report** — do not proceed.
-2. **Get the owner's answer on where a coding sequence comes from** (§9.1). It is
-   the only thing standing between here and the rest of `BRIEF.md` §5.8, and it
-   is a specification question rather than an implementation one. Raise open
-   threads 3 and 4 in the same message — both have now been waiting two sessions.
-3. **While waiting, close the two Phase 7 gaps that need no decision:**
-   - a UI for the cost basis (§9.6), so the budget panel can show a total;
-   - a `Target.coding_sequence` column plus a validator asserting it translates to
-     the protein already stored. That check is the valuable half and can be built
-     and tested before the attachment UI exists.
-4. **Then Phase 8**, whose science is still unsettled — the fuzzy-join thresholds
-   in §9.2 must be answered before it starts. Note `ARCHITECTURE.md` §13 binds the
-   scorecard: a rank statistic alone is a defect, so it ships with MAE and mean
-   signed error, bias visually adjacent to rank.
+   `python scripts/verify_gates.py` (**225 checks**). Also run the per-package
+   gates in §5, invoking the Python tools as `python -m <tool>`. One pytest
+   failure is expected and is not yours (§8). If anything else is red, **stop
+   and report** — do not proceed.
+
+2. **Phase 9 is what remains of the plan**: Playwright smoke flows, the a11y
+   pass (keyboard-only traversal of the workbench, contrast audit), and accurate
+   screenshots. The README was pulled forward and is already written and
+   audited — keep it that way rather than rewriting it.
+
+3. **Before or alongside Phase 9, close the three decided-but-unbuilt threads**,
+   in this order, because each is now a decision with no open question in front
+   of it:
+   - **Resumable scoring** (§9.3). Do this first: without it a 550-residue
+     target cannot be run at all, and one is already seeded.
+   - **`Target.coding_sequence` plus the translation validator** (§9.1). The
+     validator is the valuable half and is testable before any UI exists. Then
+     the paste field, then the primer designer against
+     `ARCHITECTURE.md` §16.1.
+   - **A cost-basis UI** (§9.7), so the budget panel can show a total.
+
+4. **Get a human to look at the screens** (§9.4). This is the largest unmeasured
+   risk in the build and it needs a person, not another gate.
+
 5. **Then close the loop as the working agreement requires**: extend
    `scripts/verify_gates.py` with the new phase's exit gate, update this file in
    the **same commit**, run every gate, fix everything red, commit with a real
@@ -783,5 +932,7 @@ Ranked by priority.
 | AlphaFold DB                      | `https://alphafold.ebi.ac.uk/api/prediction`                  | Predicted structures                            |
 | Seeded targets                    | `P37957` (*B. subtilis* lipase A, 212 aa), `P08659` (firefly luciferase, 550 aa) | The two targets everything is measured on |
 | Test fixtures                     | `1CRN`, `1BTL` (TEM-1), crambin                               | SASA golden tables, ThermoMPNN smoke tests      |
+| ProteinGym                        | `OATML-Markslab/ProteinGym_v0.1` on HuggingFace, assay `ESTA_BACSU_Nutschel_2020` | The 2,172 measured T50 values the scorecard is demoable on. Vendored with its SHA-256 in `apps/api/codonlab/data/proteingym/` |
+| The measured DMS itself           | doi:10.1021/acs.jcim.9b00954                                  | Nutschel et al. 2020, *J. Chem. Inf. Model.* 60(3) — T50 in °C for lipase A |
 
 No dashboards, no ticketing system, no CI service — everything is local.
