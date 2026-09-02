@@ -49,8 +49,10 @@ Real values, not inverted lightness. Surfaces sit _above_ the canvas (warmer and
 lighter); sunk surfaces sit below it. Borders are white at low alpha so they read as
 hairlines rather than as lines of paint.
 
-Defined now, **toggle intentionally not shipped** — per the spec, dark mode ships only
-if Phase 6 lands early. Until then these values exist so no second pass is needed.
+No document-level toggle ships — per the spec, dark mode ships only if Phase 6 lands
+early, and it did not. The values are reachable in one place: the landing page scopes
+`data-theme="dark"` to its hero, refusals and footer, which re-points every token
+underneath and leaves the application on the light palette. See §13.
 
 ```css
 [data-theme='dark'] {
@@ -143,6 +145,24 @@ Two faces, no more.
 
 Line height `1.45` body, `1.25` headings. Weights `400`, `500`, `560` — **never 700+**.
 Uppercase is permitted at 11px and nowhere else.
+
+**Three display sizes exist for the landing page and nowhere else.**
+
+| Size   | Line height | Tracking   | Use                                              |
+| ------ | ----------- | ---------- | ------------------------------------------------ |
+| `32px` | 1.2         | `-0.01em`  | landing section headings, hero stats, hero on narrow viewports |
+| `44px` | 1.1         | `-0.015em` | the landing hero from `sm`                       |
+| `56px` | 1.05        | `-0.02em`  | the landing hero from `md`                       |
+
+`BRIEF.md` §4 fixes the scale at 11/12/13/15/18/24, and **that scale still governs
+every application screen** — the workbench, the run view, the scorecard, all of
+it. The brief's §5 lists nine screens and a landing page is not among them, so
+this is a surface the in-app scale was never written for rather than a
+relaxation of it. Negative tracking at these sizes is ordinary typesetting: Inter
+at 44px with default tracking reads loose.
+
+The containment is a test, not a convention. `tokens.test.ts` fails the build if
+`text-32`, `text-44` or `text-56` appears anywhere outside `components/landing/`.
 
 **Mono face is mandatory** for: sequences, mutation codes (`A123V`), accessions, hashes.
 
@@ -407,3 +427,106 @@ Two renderings follow from it:
 - The bias figure is the only one set in `font-strong`. It is the figure most
   likely to be skipped and the one §13 exists to protect.
 
+---
+
+## 12. The mark
+
+`components/brand/codon-mark.tsx`. One component, `currentColor` throughout, so
+the mark takes whatever token its context sets and never introduces a colour.
+
+**What it is.** A segment of duplex DNA, twisting. Two backbone strands run
+straight through the middle and flick away at the top left and bottom right.
+**Five rungs**: three at full width across the straight core, and two shorter
+ones out on the flares, foreshortened the way a base pair is when the duplex
+rotates away from the viewer. The short pair is what makes the form read as
+turning rather than as a ladder; `landing.test.tsx` asserts the count, because
+dropping one is a different mark.
+
+**Construction.** Stroke 1.5 on a 24-unit grid — the same construction §1.9
+fixes for every icon in the product. A brand mark drawn at a different weight to
+the interface around it reads as an imported asset. The straight core runs y=8 to
+y=16 at x=7 and x=17; the strands leave it on a curve to (4.5, 3) and (19.5, 21);
+full-width rungs sit at y=8.5, 12 and 15.5, and the foreshortened pair spans
+x=9.5 to 14.5 at y=5 and y=19.
+
+The form has 180-degree rotational symmetry, so it needs no separate variant for
+a dark ground.
+
+**Twelve candidates were drawn and compared** at 16, 20, 24, 32 and 48px before
+this one. The rejected ones failed by reading as something else at small size — a
+bowtie, a euro sign, a text-align icon, a document, a shopping trolley. That list
+is the useful part of the record: a mark is chosen against misreadings, not
+against a description.
+
+**Colour.** Accent in the application chrome and on the landing page; `--surface`
+when it sits on an accent fill. It never carries a second colour.
+
+**Favicons are the one place a literal colour is unavoidable.** `app/icon.svg`
+and `app/apple-icon.svg` are standalone documents — a browser tab renders them
+with no stylesheet, so they cannot reference a custom property. Both carry
+`#1D4ED8`, which is `--accent`, and both are outside the extensions
+`tokens.test.ts` scans. If the accent ever moves, these two files move by hand.
+
+---
+
+## 13. The landing page
+
+`components/landing/`, served at `/` with **no application chrome** — `Shell`
+renders that one route without the rail or the demo bar.
+
+`BRIEF.md` §4 bans a marketing hero *inside the app*. This is how that stays
+true: the marketing surface and the instrument are separate documents that share
+a domain, and the ban holds everywhere the rail is. Every other prohibition in
+§4 applies here unchanged and is respected — no gradients, no glassmorphism, no
+card shadows, no three-column feature-card grid, no pill buttons, no emoji, one
+accent colour. Most of it is enforced by `tokens.test.ts`, which scans this
+directory like any other.
+
+**Rhythm comes from alternating grounds, not from ornament.** Hero, refusals and
+footer are dark; the sequence band and the three content sections are light. That
+is the whole visual device — there are no gradients, no glows, no cards floating
+on shadows, because none of those are in the system and adding them for one page
+would put a second design language in the repository.
+
+The dark sections work by scoping `data-theme="dark"` to a wrapper. Every token
+underneath re-points, so those sections are built from the same utilities as the
+light ones and cannot drift from the palette. Two consequences worth knowing:
+
+- On dark, the primary button is `bg-text text-canvas` — a near-white fill with
+  dark text. `bg-accent` with white text was measured at 3.37:1 against
+  `--accent`'s dark value and does not clear AA; this pairing clears it easily
+  and is the stronger call to action anyway.
+- The 3D viewer resolves `--surface` and `--accent` from **its own container**
+  rather than from `:root`, which is what makes the model's ground follow the
+  section it sits in.
+
+**The sequence band is real characters.** All 212 residues of P37957, the signal
+peptide dimmed and the catalytic triad in `--warn`. It runs off the edge of the
+viewport rather than wrapping or shrinking to fit: a sequence is long, and
+compressing it to look tidy is the same instinct as rounding a number for the
+same reason. `lib/landing/lipase.ts` is a copy of the API's vendored FASTA
+because the web container cannot read `apps/api`; `landing.test.tsx` asserts the
+two are byte-identical, so the duplication cannot drift.
+
+Two rules are specific to this page.
+
+**Every number on it is one this build measured**, with the conditions it was
+measured under. A page whose product claim is "no fabricated numbers" cannot
+round, dramatise or invent one — including the unflattering ones, which is why
+ρ = 0.30 is on the page rather than a rounder figure, and why the MAE reads as
+an em dash with its reason. No customer logos, no testimonials, no metrics that
+were not produced by running the thing.
+
+**The 3D viewer shows real coordinates and says what they are.** It is the
+AlphaFold model of P37957 — the protein the rest of the build is measured on —
+served as a static asset so the page renders with the API, worker and database
+all down. It is labelled a prediction rather than an experimental structure, and
+the residue buttons carry both numbering schemes, because the coordinate file
+numbers the full-length precursor while the project's canonical scheme is the
+mature protein, 31 lower. Mol\* is created headless, so none of its own chrome
+appears, and its orientation gizmo is switched off: a landing page is not the
+place to publish another product's debug widget.
+
+Ambient rotation stops under `prefers-reduced-motion`, and stops permanently the
+moment the reader focuses a residue — a model that keeps turning under the thing
+you just asked to look at is fighting you.

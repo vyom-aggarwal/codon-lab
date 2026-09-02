@@ -333,11 +333,19 @@ that genuinely crosses Postgres is asserted over HTTP in `verify_gates.py`, beca
 the boundary a future caller actually crosses.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test          # 145 vitest, 9 files
+pnpm typecheck && pnpm lint && pnpm test          # 162 vitest, 10 files
 cd apps/api && .venv/Scripts/python -m pytest -q  # 396 pass, 6 skipped (opt-in)
 cd apps/api && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy codonlab
 python scripts/verify_gates.py                    # 225 checks, live stack
 ```
+
+The landing page at `/` is a marketing surface with no application chrome, which
+is what keeps `BRIEF.md` §4's ban on a marketing hero *inside* the app true. It
+carries a live Mol\* model of the seeded lipase, served as a static asset so the
+page renders with the API, worker and database all down, and every figure on it
+is one this build measured — including the unflattering ones. `DESIGN.md` §13
+holds the rules; the three places this goes beyond the brief are listed in
+`HANDOFF.md` §6.
 
 The design system is enforced mechanically rather than by discipline:
 `apps/web/test/tokens.test.ts` fails the build on a hex literal, an `rgb()`/`hsl()` literal,

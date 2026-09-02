@@ -74,7 +74,13 @@ describe('type and spacing come off the scale', () => {
     // `animate-[layer-in_var(--duration-fast)]` is fine — it composes tokens.
     // `text-[13px]` is not — it is a token that never made it into DESIGN.md.
     const arbitrary = /\b[a-z-]+-\[([^\]]+)\]/g
-    const rawLiteral = /#[0-9a-fA-F]{3,8}|\d+(\.\d+)?(px|rem|em|vh|vw)\b/
+    // The unit ends in a negative lookahead rather than `\b`. `\b` is a word
+    // boundary and `_` is a word character, so `grid-cols-[4rem_1fr]` slipped
+    // past this check for as long as it existed — Tailwind uses `_` as its
+    // space separator, and that underscore suppressed the boundary. Found while
+    // adding the landing page, which is where a multi-value arbitrary track
+    // template first appeared in this codebase.
+    const rawLiteral = /#[0-9a-fA-F]{3,8}|\d+(\.\d+)?(px|rem|em|vh|vw)(?![a-z])/
 
     const violations: string[] = []
     for (const file of sourceFiles()) {
@@ -202,9 +208,22 @@ describe('tokens.css matches DESIGN.md', () => {
     }
   })
 
-  it('defines exactly the six sizes on the type scale', () => {
+  it('defines exactly the six application sizes plus the three display sizes', () => {
     const sizes = [...tokens.matchAll(/^\s*--text-(\d+):/gm)].map((match) => match[1])
-    expect(sizes).toEqual(['11', '12', '13', '15', '18', '24'])
+    expect(sizes).toEqual(['11', '12', '13', '15', '18', '24', '32', '44', '56'])
+  })
+
+  it('keeps the display sizes off every application screen', () => {
+    // 32 and 44 exist for the landing page, which is not part of the app and
+    // which the brief's in-app scale was not written for (DESIGN.md §1.5).
+    // Widening the scale is only safe if the widening is contained, so the
+    // containment is a test rather than a convention.
+    const display = /text-(32|44|56)/
+    const landing = join('components', 'landing')
+    const offenders = sourceFiles().filter(
+      (file) => display.test(readFileSync(file, 'utf8')) && !file.includes(landing),
+    )
+    expect(offenders.map((file) => relative(REPO_ROOT, file))).toEqual([])
   })
 
   it('defines no font weight at or above 700', () => {

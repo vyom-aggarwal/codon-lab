@@ -1,7 +1,7 @@
-import { FlaskConical } from 'lucide-react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { CodonMark } from './brand/codon-mark'
 import { DemoBanner } from './demo-banner'
 
 /**
@@ -19,10 +19,13 @@ export function AppFrame({ demoMode, children }: { demoMode: boolean; children: 
           aria-label="Primary"
           className="w-rail border-border bg-surface flex shrink-0 flex-col border-r"
         >
-          <div className="border-border flex h-12 items-center gap-2 border-b px-4">
-            <FlaskConical className="text-accent size-4" strokeWidth={1.5} />
+          <Link
+            href="/"
+            className="border-border hover:bg-surface-sunk flex h-12 items-center gap-2 border-b px-4"
+          >
+            <CodonMark className="text-accent" />
             <span className="text-13 font-strong">Codon Lab</span>
-          </div>
+          </Link>
           <ul className="p-2">
             <li>
               <Link

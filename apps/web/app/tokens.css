@@ -161,6 +161,21 @@
   --text-24: 24px;
   --text-24--line-height: 1.25;
 
+  /* Display sizes. The landing page only — DESIGN.md §1.5 states the rule and
+     tokens.test.ts enforces it, so they cannot leak into an application screen.
+     The application's scale still ends at 24px. */
+  --text-32: 32px;
+  --text-32--line-height: 1.2;
+  --text-32--letter-spacing: -0.01em;
+
+  --text-44: 44px;
+  --text-44--line-height: 1.1;
+  --text-44--letter-spacing: -0.015em;
+
+  --text-56: 56px;
+  --text-56--line-height: 1.05;
+  --text-56--letter-spacing: -0.02em;
+
   /* ------------------------------------------------------------- durations */
   --duration-fast: 120ms;
   --duration-base: 160ms;

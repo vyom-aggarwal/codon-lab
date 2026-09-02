@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import type { ReactNode } from 'react'
 
-import { AppFrame } from '@/components/app-frame'
 import { QueryProvider } from '@/components/query-provider'
+import { Shell } from '@/components/shell'
 import { ToastProvider } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { fetchMeta } from '@/lib/api'
@@ -23,8 +23,15 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Codon Lab',
-  description: 'Protein design copilot for wet-lab scientists.',
+  title: {
+    default: 'Codon Lab — protein engineering copilot',
+    template: '%s — Codon Lab',
+  },
+  description:
+    'Turn a plain-language protein engineering goal into a ranked list of specific '
+    + 'mutations, where every number traces to the model, version and weights hash '
+    + 'that produced it.',
+  applicationName: 'Codon Lab',
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
@@ -41,7 +48,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <QueryProvider>
           <TooltipProvider delayDuration={300}>
             <ToastProvider>
-              <AppFrame demoMode={demoMode}>{children}</AppFrame>
+              <Shell demoMode={demoMode}>{children}</Shell>
             </ToastProvider>
           </TooltipProvider>
         </QueryProvider>

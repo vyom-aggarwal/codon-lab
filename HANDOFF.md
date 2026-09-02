@@ -161,9 +161,20 @@ to know.
   precision@10 = 1.00** and is caught only by the bias term at **−2.00
   kcal/mol** — asserted over HTTP in the gate, and visible on the screen with
   the calibration bins running parallel to the identity line.
-- **All local gates green**, re-run 2026-09-01 at the end of Phase 8: **396
-  pytest** passing (6 skipped, 1 expected failure — see §8), **145 vitest across
-  9 files**, ruff clean, mypy strict clean on **69 source files**,
+- **A landing page and a brand mark ship, at the owner's request** (2026-09-02).
+  `/` is now a marketing surface with no application chrome; `Shell` is what
+  keeps `BRIEF.md` §4's "no marketing hero **inside** the app" true. It carries a
+  live Mol\* viewer of the seeded lipase, served as a static asset so the page
+  renders with the whole stack down. Every figure on it is one this build
+  measured. `DESIGN.md` §12 and §13 hold the rules; three deviations from the
+  brief are named in §6.
+- **Gates re-run 2026-09-02 after the landing page landed:** **225 gate checks,
+  0 failures** against the live stack; **162 vitest across 10 files**; ruff and
+  mypy clean on 69 files; `pnpm typecheck` and `pnpm lint` clean. The host
+  pytest suite is **blocked by a machine policy, not by the code** — see §8;
+  340 pass with the biotite-dependent modules excluded. Earlier on the same day: **396
+  pytest** passing (6 skipped, 1 expected failure — see §8), **162 vitest across
+  10 files**, ruff clean, mypy strict clean on **69 source files**,
   `pnpm typecheck` and `pnpm lint` clean, and **225 gate checks with 0 failures**
   against the live stack.
 
@@ -312,6 +323,10 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 | `apps/api/codonlab/services/measurements.py`      | Intake, the join, the scorecard          | Holds `_known_variants`, which excludes variants written in a superseded numbering scheme. That check is load-bearing — §3 |
 | `apps/api/codonlab/data/proteingym/`              | 2,172 real measured T50 values           | Vendored with its SHA-256, its citation, and what it can and cannot demonstrate. Read by `seed.py`, never fetched at boot |
 | `apps/web/components/scorecard/scorecard-card.tsx`| Rank, error and bias in one row          | The shape is a contract, not a layout preference. `scorecard.test.tsx` asserts the adjacency from the DOM |
+| `apps/web/components/brand/codon-mark.tsx`        | The mark                                 | Five rungs, stroke 1.5, `currentColor` only. `landing.test.tsx` asserts the count — twelve candidates were compared, `DESIGN.md` §12 lists what the rejects were misread as |
+| `apps/web/components/landing/landing.tsx`         | The landing page                         | Outside the app chrome. Every figure on it is one this build measured, including the unflattering ones |
+| `apps/web/components/landing/hero-structure.tsx`  | The live 3D structure                    | Holds two Mol\* traps that cost real time: `handleResize` is on the plugin, not `canvas3d`, and `Color.fromHexString` is not the one that reads `#rrggbb` |
+| `apps/web/components/shell.tsx`                   | Chrome on, chrome off                    | The single reason `BRIEF.md` §4's "no marketing hero inside the app" is still true |
 
 ---
 
@@ -375,7 +390,7 @@ pip install -e ".[models]"       # torch + transformers, several GB
 ### Tests and gates
 
 ```powershell
-pnpm typecheck; pnpm lint; pnpm test                   # 145 vitest across 9 files
+pnpm typecheck; pnpm lint; pnpm test                   # 162 vitest across 10 files
 cd apps\api; .venv\Scripts\python -m pytest -q        # 396 pass, 6 skipped, 1 known fail
 cd apps\api; .venv\Scripts\python -m ruff check .     # clean
 cd apps\api; .venv\Scripts\python -m mypy codonlab    # strict, clean, 69 files
@@ -471,6 +486,24 @@ built around.
   residues the user annotated, not Cα–Cα. An arginine side chain reaches ~7 Å
   past its own Cα. Nothing is inferred — no pocket detection, no database lookup.
 - No conservation column until an MSA provider exists.
+
+### Deviations from the brief, taken on the owner's instruction (2026-09-02)
+
+The owner asked for a landing page and a real brand mark. `BRIEF.md` §5 lists
+nine screens and a landing page is not among them, so three things here go
+beyond the specification. None was a silent edit; the brief is unchanged and
+each deviation is recorded where the rule it bends lives.
+
+| Deviation | Why it is not a violation | Where it is written down |
+| --- | --- | --- |
+| A marketing surface exists | §4 bans a hero **inside the app**. `Shell` renders `/` with no rail and no demo bar, so the ban holds everywhere the application chrome is | `DESIGN.md` §13 |
+| Two type sizes above 24px | §4's scale governs the nine application screens, and still does — a landing page is a surface it was never written for. `tokens.test.ts` fails the build if `text-32` or `text-44` appears outside `components/landing/` | `DESIGN.md` §1.5 |
+| Two colour literals in `app/icon.svg` and `app/apple-icon.svg` | A favicon is a standalone document rendered with no stylesheet, so it cannot reference a custom property. Both carry `--accent`'s value and both need updating by hand if it moves | `DESIGN.md` §12 |
+
+The owner asked twice for more visual impact and then for "very clean" with 3D.
+What landed is the clean layout with a live structure rather than a dark or
+heavily styled page; if that reading was wrong, the page is one file
+(`components/landing/landing.tsx`) and the mark is another.
 
 ### Standing rules that bind future phases
 
@@ -629,6 +662,15 @@ built around.
   subtractable, so the unit gate is pinned on its own. Look for this shape
   wherever a fixture is "obviously" different.
 
+- **A `\b` after a CSS unit does not close the check it looks like it closes.**
+  `tokens.test.ts` rejected arbitrary Tailwind values containing raw lengths with
+  `/\d+(\.\d+)?(px|rem|em|vh|vw)\b/`. `_` is a word character and Tailwind uses
+  it as the space separator, so `grid-cols-[4rem_1fr]` never matched and had
+  been passing for as long as the check existed — while `grid-cols-[1fr_20rem]`
+  was caught, because `]` *is* a boundary. Now a negative lookahead. Found by
+  asking why one violation was reported and an identical one on the next line
+  was not.
+
 ### Phase 8 mutation checks, and what they caught
 
 The working agreement asks for a mutation test wherever a test guards something
@@ -656,6 +698,29 @@ were caught.
   `→`. It now reconfigures its own stdout/stderr to UTF-8 with `errors="replace"`.
 - **RQ job ids may not contain `:`.** They are `run-{uuid}`.
 - **TanStack Table v9 was installed and had to be pinned back to v8.**
+- **Three more Mol\* traps, all silent** (found building the landing page's 3D
+  viewer, 2026-09-02). Each one produces a wrong picture and no error:
+  - **`handleResize` is on the `PluginContext`, not on `canvas3d`.**
+    `plugin.canvas3d.handleResize?.()` is a no-op — the property is simply
+    undefined — and the symptom is a scene rendered into a 114x114 corner of a
+    correctly sized 537x537 buffer. Mol\* does subscribe to its own resize
+    input, but that is driven by *window* resize events, so a container that
+    grows during layout never triggers it. Call `plugin.handleResize()`, and
+    attach a `ResizeObserver` to the container.
+  - **`Color.fromHexString` is `parseInt(s)` and wants `0xrrggbb`.** Handed a CSS
+    `#rrggbb` it returns `NaN`, which renders as black rather than throwing.
+    `Color.fromHexStyle` is the one that strips the `#`.
+  - **The trackball spin animation requires `axis`.** `{ name: 'spin', params:
+    { speed } }` throws `Cannot read properties of undefined (reading '0')` on
+    the first animation tick and kills the whole loop, because `spin()` reads
+    `params.axis[0]` directly. Pass `axis: [0, -1, 0]`, the default.
+
+  A fourth thing was tried and abandoned: hand-building the state hierarchy with
+  `createModel` / `createStructure` / `tryCreateComponentFromExpression`, to drop
+  the signal peptide from the picture. It reported success and rendered nothing.
+  The stock `applyPreset('default')` is what ships, with the theme patched
+  afterwards — a correct structure beats a cleverer empty one.
+
 - **Mol\*'s entry point is `initViewerAsync`, not `initViewer`**, and focusing a
   residue needs **author** numbering (`auth_seq_id`), not the sequence index.
 - **ThermoMPNN's config object needs a `__contains__` shim** (`'lightattn' in cfg.model`),
@@ -663,6 +728,35 @@ were caught.
   pytorch-lightning means stripping the `model.` prefix Lightning puts on keys.
 - **`P0CG48` is Polyubiquitin-C (685 aa), not the 76 aa ubiquitin monomer.**
   Reconciliation correctly refused it with nine candidate offsets. Not a bug.
+
+### The Application Control policy is spreading (2026-09-02)
+
+The machine-level Windows Application Control policy that HANDOFF has recorded
+since 2026-09-01 — it blocks torch's DLLs and every pip-generated `.exe`
+launcher in the venv — **now also blocks biotite's compiled extensions.**
+
+    ImportError: DLL load failed while importing localungapped:
+    An Application Control policy has blocked this file.
+
+It tightened *during* a session: `python -m pytest` returned 396 passed earlier
+on 2026-09-02 and, with no Python file changed in between, later returned four
+collection errors. The affected modules are exactly those that reach
+`codonlab.features.structure`: `test_meta`, `test_pair_distances`,
+`test_run_pipeline`, `test_sasa`, plus one case in `test_schemes`.
+
+**What this does and does not mean.**
+
+- The host test suite cannot currently be run in full. Excluding those modules,
+  **340 pass, 6 skip**, and the only other failure is the long-documented torch
+  one. Nothing here is a code defect.
+- **The Docker containers are unaffected** — they carry their own Python and
+  their own biotite. `verify_gates.py` was **225/225** immediately after the
+  host suite broke. When the host and the containers disagree, the containers
+  are the ones that reflect the code.
+- Do not "fix" this by reinstalling biotite or rebuilding the venv. Both were
+  tried against the same policy for torch and neither helps; it is a machine
+  setting. Run the affected checks through the container, or get the policy
+  changed.
 
 ### Machine facts discovered during the rename (2026-09-01)
 
