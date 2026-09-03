@@ -32,7 +32,7 @@ export default async function GoalPage({ params }: { params: Promise<{ id: strin
           href={`/targets/${target.id}` as Route}
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           {target.name}
         </Link>
         <h1 className="text-18 font-strong mt-1">Goal</h1>

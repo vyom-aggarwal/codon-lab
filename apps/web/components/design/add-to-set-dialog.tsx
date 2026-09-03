@@ -100,7 +100,7 @@ export function AddToSetDialog({
     >
       <DialogTrigger asChild>
         <Button size="sm" disabled={codes.length === 0}>
-          <Layers strokeWidth={1.5} />
+          <Layers aria-hidden="true" strokeWidth={1.5} />
           Add to design set
         </Button>
       </DialogTrigger>

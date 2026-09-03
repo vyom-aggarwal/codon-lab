@@ -41,7 +41,7 @@ export default async function DesignSetsPage({
           href={`/runs/${id}/workbench` as Route}
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           Variant workbench
         </Link>
       </div>

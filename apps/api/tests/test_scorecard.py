@@ -324,3 +324,48 @@ def test_accumulating_by_averaging_finished_cards_is_refused() -> None:
 
     with pytest.raises(NotImplementedError, match="pooling"):
         accumulate({})
+
+
+# --------------------------------------------------------------------------- #
+# Identity: a mutation code is not unique across targets
+# --------------------------------------------------------------------------- #
+
+
+def test_two_targets_may_carry_the_same_mutation_code() -> None:
+    """A pooled card spans targets, and `A1N` is not one variant.
+
+    Found in Phase 9 on the live lab-wide scorecard: a card reported n = 192
+    while carrying 24 distinct codes, because eight target rows each had the
+    same substitutions. The pairs were right; only their identity was wrong.
+    """
+    pairs = [
+        Paired(code="A1V", predicted=1.0, measured=1.0, key="variant-a"),
+        Paired(code="A1V", predicted=9.0, measured=9.0, key="variant-b"),
+    ]
+    assert len({pair.identity for pair in pairs}) == 2
+    # Spearman sees two points, not one.
+    assert spearman(pairs, DDG, MEASURED_DDG) is not None
+
+
+def test_precision_matches_on_identity_rather_than_on_the_displayed_code() -> None:
+    """The discriminating case.
+
+    Two variants share the code `A1V`. One is the predictor's best and the
+    bench's worst; the other is the reverse. Matching on the code would score
+    this a hit — the predictor's top pick would be credited with a different
+    variant's measurement. Matching on identity scores it a miss, which is the
+    truth.
+    """
+    pairs = [
+        # ddG is lower-is-better, so -5.0 is the predictor's favourite.
+        Paired(code="A1V", predicted=-5.0, measured=9.0, key="one"),
+        Paired(code="A1V", predicted=5.0, measured=-9.0, key="two"),
+    ]
+    result = precision_at_k(pairs, DDG, MEASURED_DDG, k=1)
+    assert result is not None
+    assert result.value == 0.0, "the top-ranked variant is not the best measured one"
+
+
+def test_identity_defaults_to_the_code_when_no_key_is_given() -> None:
+    """So a single-target card, and every hermetic test above, still work."""
+    assert Paired(code="A1V", predicted=1.0, measured=1.0).identity == "A1V"

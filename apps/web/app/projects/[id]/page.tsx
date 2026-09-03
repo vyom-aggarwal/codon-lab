@@ -38,7 +38,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           href="/projects"
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           Projects
         </Link>
         <h1 className="text-24 font-strong mt-1">{project.name}</h1>

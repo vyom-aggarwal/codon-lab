@@ -809,6 +809,8 @@ export type Experiment = z.infer<typeof experimentSchema>
 export const experimentListSchema = z.array(experimentSchema)
 
 export const scatterPointSchema = z.object({
+  /** Identity. `code` is not unique on a card pooled across targets. */
+  variant_id: z.string().uuid(),
   code: z.string(),
   hgvs: z.string(),
   predicted: z.number(),
@@ -857,6 +859,9 @@ export const scorecardSchema = z.object({
   ),
   points: z.array(scatterPointSchema),
   targets: z.array(z.string()),
+  /** Distinct target rows behind this card; exceeds `targets.length` when
+   * several targets share a name. */
+  target_count: z.number().int(),
 })
 
 export type Scorecard = z.infer<typeof scorecardSchema>

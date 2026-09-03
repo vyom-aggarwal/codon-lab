@@ -111,7 +111,11 @@ export function PredictedVsMeasured({
             <g clipPath={`url(#${clipId})`}>
               {points.map((point) => (
                 <circle
-                  key={point.code}
+                  // Keyed on the variant, not the code: a pooled card can carry
+                  // the same code from two targets, and keying on the code
+                  // made React drop every duplicate — the chart silently drew
+                  // 24 marks under a caption claiming 192.
+                  key={point.variant_id}
                   cx={x(point.predicted)}
                   cy={y(point.measured)}
                   r={2}

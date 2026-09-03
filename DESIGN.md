@@ -78,23 +78,76 @@ underneath and leaves the application on the light palette. See §13.
 
 ### 1.3 Contrast budget
 
-Audited against the surface each token is actually used on. Phase 9 re-runs this.
+**Recomputed and enforced on every build**, not audited by hand once a phase.
+`apps/web/test/contrast.test.ts` derives every ratio below from `tokens.css`
+with the WCAG 2.1 relative-luminance formula and fails if this table disagrees.
+Changing a token without updating the table breaks the build; so does updating
+the table without changing the token.
 
-| Pair                          | Ratio  | Verdict                              |
-| ----------------------------- | ------ | ------------------------------------ |
-| `--text` on `--surface`       | 16.9:1 | AAA                                  |
-| `--text-muted` on `--surface` | 7.5:1  | AAA                                  |
-| `--text-faint` on `--surface` | 2.6:1  | **fails AA — restricted, see below** |
-| `--accent` on `--surface`     | 8.6:1  | AAA                                  |
-| `--surface` on `--accent`     | 8.6:1  | AAA (white text on accent fill)      |
-| `--positive` on `--surface`   | 5.3:1  | AA                                   |
-| `--negative` on `--surface`   | 6.2:1  | AA                                   |
-| `--warn` on `--surface`       | 4.9:1  | AA                                   |
+That gate exists because the hand-maintained version drifted. Until Phase 9 this
+section claimed `--accent` on `--surface` was **8.6:1, AAA**. It is **6.70:1,
+AA** — and had been since Phase 1. The error was in the direction that
+overstates compliance, which is the direction that matters.
 
-`--text-faint` is for placeholder text, disabled controls, and non-essential ornament
-**only**. It must never carry information the user has to read. In particular it is
-never used to encode low confidence — per the spec, low confidence is encoded by
-desaturation plus an explicit ± interval, never by making text transparent.
+Ratios are for normal-size text: AAA at 7:1, AA at 4.5:1.
+
+#### Light
+
+| Pair                              | Ratio   | Verdict                              |
+| --------------------------------- | ------- | ------------------------------------ |
+| `--text` on `--surface`           | 17.49:1 | AAA                                  |
+| `--text-muted` on `--surface`     | 7.63:1  | AAA                                  |
+| `--text-faint` on `--surface`     | 2.52:1  | **fails AA — restricted, see below** |
+| `--accent` on `--surface`         | 6.70:1  | AA                                   |
+| `--surface` on `--accent`         | 6.70:1  | AA (white text on an accent fill)    |
+| `--positive` on `--surface`       | 5.02:1  | AA                                   |
+| `--negative` on `--surface`       | 6.47:1  | AA                                   |
+| `--warn` on `--surface`           | 5.02:1  | AA                                   |
+| `--text` on `--canvas`            | 16.89:1 | AAA                                  |
+| `--text-muted` on `--canvas`      | 7.37:1  | AAA                                  |
+| `--accent` on `--canvas`          | 6.47:1  | AA                                   |
+| `--text` on `--surface-sunk`      | 16.03:1 | AAA                                  |
+| `--text-muted` on `--surface-sunk`| 6.99:1  | AA                                   |
+| `--text` on `--accent-sunk`       | 15.87:1 | AAA                                  |
+| `--accent` on `--accent-sunk`     | 6.08:1  | AA                                   |
+
+#### Dark
+
+Dark is reachable in exactly one place — the landing page scopes it to three
+sections (§13). It is audited anyway, because the tokens exist and a toggle
+would make all of it live at once.
+
+| Pair                              | Ratio   | Verdict                              |
+| --------------------------------- | ------- | ------------------------------------ |
+| `--text` on `--surface`           | 16.03:1 | AAA                                  |
+| `--text-muted` on `--surface`     | 6.93:1  | AA                                   |
+| `--text-faint` on `--surface`     | 3.65:1  | **fails AA — restricted, see below** |
+| `--accent` on `--surface`         | 4.75:1  | AA                                   |
+| `--surface` on `--accent`         | 4.75:1  | AA                                   |
+| `--positive` on `--surface`       | 7.68:1  | AAA                                  |
+| `--negative` on `--surface`       | 6.32:1  | AA                                   |
+| `--warn` on `--surface`           | 8.14:1  | AAA                                  |
+| `--text` on `--canvas`            | 17.26:1 | AAA                                  |
+| `--text-muted` on `--canvas`      | 7.47:1  | AAA                                  |
+| `--accent` on `--canvas`          | 5.12:1  | AA                                   |
+| `--text` on `--surface-sunk`      | 17.89:1 | AAA                                  |
+| `--text-muted` on `--surface-sunk`| 7.74:1  | AAA                                  |
+| `--text` on `--accent-sunk`       | 14.27:1 | AAA                                  |
+| `--accent` on `--accent-sunk`     | 4.23:1  | **fails AA — latent, see below**     |
+
+**`--accent` on `--accent-sunk` fails AA on dark.** `--accent-sunk` is the
+selected-row background, so this pairing would occur wherever accent-coloured
+text sits on a selected row. It is **latent rather than live**: the only dark
+surfaces in the product are three landing-page sections, and none of them
+contains a table. It is recorded here, and asserted in `contrast.test.ts`, so
+that shipping a dark-mode toggle cannot make it live without someone being made
+to look at it first.
+
+`--text-faint` is for placeholder text, disabled controls, and non-essential
+ornament **only**, in either theme. It must never carry information the user has
+to read. In particular it is never used to encode low confidence — per the spec,
+low confidence is encoded by desaturation plus an explicit ± interval, never by
+making text transparent.
 
 ### 1.4 Data colour
 
@@ -280,8 +333,16 @@ Tables, not cards, for anything list-shaped. Every table has:
 
 `Esc` closes the topmost layer. Every table carries the keyboard path in §3.
 
-`⌘K` and `?` are **deferred — see §9.** They are specified, not built, and this section
-describes what exists.
+`⌘K` opens the command palette and `?` opens the shortcut sheet. Both ship in Phase 9
+and both are mounted in `AppFrame`, so they exist on every application screen and on none
+of the landing page. `?` is ignored while a text field has focus — it is an ordinary
+character, and a user typing a question mark into the goal composer is not asking for
+help.
+
+**The shortcut sheet lists only bindings that exist.** `apps/web/test/keyboard.test.tsx`
+checks it in both directions: every key the workbench implements appears in the sheet, and
+every key the sheet lists is in the implemented set. A sheet that names a key nothing
+answers to is the product telling the user something untrue about itself.
 
 Focus rings are visible on **every** interactive element: 2px accent at 2px offset.
 
@@ -341,8 +402,6 @@ Nothing may be added to this section without a phase named beside it.
 
 | Device                          | Specified in   | Lands in | Why not yet                                                                                                                              |
 | ------------------------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `⌘K` command palette            | `BRIEF.md` §4  | Phase 9  | Needs a search surface over projects, targets, constraints and variants — most of which arrived only in Phases 4 and 5. Built with the a11y pass, where keyboard traversal is the phase's subject. |
-| `?` shortcut sheet              | `BRIEF.md` §4  | Phase 9  | It documents the shortcuts, so it follows them. The workbench path (`j`/`k`/`x`/`Enter`/`Esc`) exists and is tested; the sheet listing it does not.                                                |
 | Wild-type / mutant rotamer toggle | `BRIEF.md` §5.6 | Unscheduled | Needs a side-chain packer. Redrawing the wild-type residue under a "mutant" label would fabricate structural data. See `ARCHITECTURE.md` §12 for the decision and the Dunbrack path forward.       |
 | Dark mode toggle                | `BRIEF.md` §4  | Unscheduled | Tokens are defined in §1.2 and ship; the toggle does not. Per the brief, it lands only if a phase comes in early.                          |
 | Wet-lab handoff screen          | `BRIEF.md` §5.8 | Phase 7, blocked | The **refusal** ships (`services/exports`): primers are refused while any provider fabricates, and again because no target carries a coding DNA sequence to design against. The screen that would show primers, a plate map and a PDF report does not exist, and cannot until a construct's DNA can be attached. `ARCHITECTURE.md` §16. |
@@ -350,6 +409,10 @@ Nothing may be added to this section without a phase named beside it.
 
 **Row-height compaction (`26px`) is not deferred** — it is built, in the workbench
 filter rail.
+
+**`⌘K` and the `?` sheet are no longer deferred** — both shipped in Phase 9 and are
+described in §4. They were the only two rows in this table with a phase that has now
+passed; what remains here is unscheduled or blocked, and each says which.
 
 ---
 
@@ -527,6 +590,20 @@ mature protein, 31 lower. Mol\* is created headless, so none of its own chrome
 appears, and its orientation gizmo is switched off: a landing page is not the
 place to publish another product's debug widget.
 
-Ambient rotation stops under `prefers-reduced-motion`, and stops permanently the
-moment the reader focuses a residue — a model that keeps turning under the thing
-you just asked to look at is fighting you.
+**There is no ambient rotation, and that is a correctness decision rather than a
+taste one.** The viewer originally spun. A spin redraws the scene every frame,
+and this scene cost ~65 ms a frame even at 358x358 — enough to saturate the main
+thread and starve the Next router, so that clicking "Open the workbench" did
+nothing at all. It was measured both ways: under `prefers-reduced-motion:
+reduce`, where the spin never started, the same click navigated and a frame cost
+14 ms. A dead call-to-action is a far worse defect than a still model.
+
+So the model sits still until the reader moves it, which is what §1.9 asks for
+anyway: motion on demand, not motion by default. It remains fully interactive —
+drag to rotate, and the triad buttons fly the camera to a residue. Temporal
+multisampling and screen-space occlusion are off for the same reason; they earn
+their cost in a structure viewer a scientist is studying, not on a landing page.
+
+If ambient motion is ever wanted back, the prerequisite is making a frame cheap,
+not re-adding the spin. `apps/web/e2e/landing-cta.spec.ts` holds the line at
+25 ms a frame and explains where that number came from.

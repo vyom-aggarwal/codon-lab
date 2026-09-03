@@ -57,7 +57,7 @@ export const DialogContent = forwardRef<
               'text-text-muted hover:bg-surface-sunk hover:text-text',
             )}
           >
-            <X className="size-4" strokeWidth={1.5} />
+            <X aria-hidden="true" className="size-4" strokeWidth={1.5} />
           </DialogPrimitive.Close>
         </div>
         <div className="p-4">{children}</div>

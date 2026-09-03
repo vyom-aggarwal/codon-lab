@@ -248,7 +248,7 @@ function Applied({ targetId, constraints }: { targetId: string; constraints: Con
                         size="sm"
                         variant="danger"
                         label="Remove constraint"
-                        icon={<Trash2 strokeWidth={1.5} />}
+                        icon={<Trash2 aria-hidden="true" strokeWidth={1.5} />}
                         disabled={pending}
                         onClick={() => remove(constraint.id)}
                       />
@@ -371,7 +371,7 @@ function AddByHand({
         {failure ? <InlineError message={failure.message} remedy={failure.remedy} /> : null}
 
         <Button type="submit" variant="primary" disabled={pending || disabled}>
-          <Plus strokeWidth={1.5} />
+          <Plus aria-hidden="true" strokeWidth={1.5} />
           {pending ? 'Adding…' : 'Add constraint'}
         </Button>
       </form>

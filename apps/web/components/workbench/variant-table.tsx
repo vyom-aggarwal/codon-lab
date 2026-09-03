@@ -310,9 +310,9 @@ export function VariantTable({
                         ) : null}
                       </span>
                       {sorted === 'asc' ? (
-                        <ArrowUp className="size-3 shrink-0" strokeWidth={1.5} />
+                        <ArrowUp aria-hidden="true" className="size-3 shrink-0" strokeWidth={1.5} />
                       ) : sorted === 'desc' ? (
-                        <ArrowDown className="size-3 shrink-0" strokeWidth={1.5} />
+                        <ArrowDown aria-hidden="true" className="size-3 shrink-0" strokeWidth={1.5} />
                       ) : null}
                     </button>
                   </th>

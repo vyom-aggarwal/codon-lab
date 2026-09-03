@@ -12,7 +12,8 @@ budget on it.
 The gap is not capability. It is **trust**. This is built for someone skeptical, busy,
 and correct.
 
-> **Status: Phases 1–8 of 9 complete**, with one exception. Real ESM-2 and ThermoMPNN
+> **Status: Phases 1–9 of 9 built**, with two clauses of the definition of done
+> outstanding and named below. Real ESM-2 and ThermoMPNN
 > run and are verified; the shipped default is a pair of synthetic providers that badge
 > every number they invent. The design set builder, its epistasis warnings, and the
 > validation loop — results intake, the join, and the per-predictor scorecard — all ship.
@@ -89,9 +90,33 @@ Verify the whole thing end to end over HTTP:
 python scripts/verify_gates.py
 ```
 
-**225 checks** asserting every phase exit gate against a live stack. It seeds its own
+**238 checks** asserting every phase exit gate against a live stack. It seeds its own
 projects and targets, so it is idempotent and safe to re-run. A full pass fetches from
 UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few minutes.
+
+## What it looks like
+
+Captured from a running stack by `pnpm --filter @codonlab/web screenshots`, so they can be
+regenerated rather than redrawn. Nothing is cropped: the amber bar is in every application
+shot because the seeded providers are synthetic, and hiding it would be the exact
+fabrication it exists to prevent.
+
+**The variant workbench** — the main screen. 10,450 ranked substitutions, the numbering
+scheme named in the column header, every ΔΔG with its interval and its sign convention,
+and every synthetic number carrying its mark.
+
+![The variant workbench](docs/screenshots/workbench.png)
+
+**The scorecard** — rank, error and bias in one row, with the reason printed where the
+error terms cannot be computed.
+
+![The predictor scorecard](docs/screenshots/scorecard.png)
+
+**The run view** — six stages, each with its model, version, input hash and runtime.
+
+![The run view](docs/screenshots/run-view.png)
+
+---
 
 ### Running the real models
 
@@ -333,11 +358,24 @@ that genuinely crosses Postgres is asserted over HTTP in `verify_gates.py`, beca
 the boundary a future caller actually crosses.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test          # 162 vitest, 10 files
-cd apps/api && .venv/Scripts/python -m pytest -q  # 396 pass, 6 skipped (opt-in)
+pnpm typecheck && pnpm lint && pnpm test          # 210 vitest, 12 files
+cd apps/api && .venv/Scripts/python -m pytest -q  # 399 pass, 6 skipped (opt-in)
 cd apps/api && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy codonlab
-python scripts/verify_gates.py                    # 225 checks, live stack
+python scripts/verify_gates.py                    # 238 checks, live stack
+pnpm --filter @codonlab/web e2e                   # 6 Playwright flows, needs the stack
 ```
+
+The Playwright flows exist for the claims a headless DOM cannot settle: that the run
+button is genuinely disabled before a parse is confirmed, that a score reaches its
+weights hash in exactly two **trusted** clicks, and that the landing page stays
+responsive once its 3D viewer is running. `HANDOFF.md` §8 records a mutation — the
+Trace control hidden behind a closed `<details>`, a real third click — that the jsdom
+version passes and this one catches.
+
+The third flow exists because the defect it guards actually shipped: an ambient rotation
+in the hero viewer cost ~65 ms a frame, which starved the router so completely that the
+"Open the workbench" button did nothing at all. The served HTML was correct, so the gate
+saw nothing, and jsdom has no frame budget. It took a real browser and a ten-second wait.
 
 The landing page at `/` is a marketing surface with no application chrome, which
 is what keeps `BRIEF.md` §4's ban on a marketing hero *inside* the app true. It
@@ -433,7 +471,7 @@ the point.
 | 6 — Real `ESMScorer` + `StabilityPredictor` | ✅ | ESM-2 matched against independent computation; ThermoMPNN sign established two ways |
 | 7 — Design sets, epistasis, wet-lab handoff | ◐ | Builder and epistasis warnings ship; exports refuse primers with the reason stated. The handoff itself is blocked on template DNA |
 | 8 — Results intake, calibration, scorecard | ✅ | **The moat.** Rank + error + bias, per §13, demonstrated on 2,172 real measured T50 values |
-| 9 — Playwright, a11y pass, README, accurate screenshots | ⬜ | ⌘K and the `?` shortcut sheet land here, deferred deliberately in `DESIGN.md` §9 |
+| 9 — Playwright, a11y pass, README, accurate screenshots | ◐ | ⌘K, the `?` sheet, three Playwright flows, the keyboard suite, an enforced contrast audit and regenerable screenshots all ship. Two clauses of §10 remain — see below |
 
 **Phase 8 is the one that matters.** The user uploads measured results from the bench, the
 app joins them to predicted variants, and a persistent scorecard accumulates per predictor.

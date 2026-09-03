@@ -1,16 +1,26 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CodonMark, CodonWordmark } from '@/components/brand/codon-mark'
+import { Shell } from '@/components/shell'
 import { TRIAD } from '@/components/landing/hero-structure'
 import {
   LIPASE_SEQUENCE,
   SIGNAL_PEPTIDE_LENGTH,
   TRIAD_POSITIONS,
 } from '@/lib/landing/lipase'
+
+/** Swapped per test; read by the hoisted `next/navigation` mock below. */
+let currentPath = '/'
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => currentPath,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}))
 
 /**
  * The brand mark, the landing page's structural claims, and the one piece of
@@ -81,37 +91,48 @@ describe('the catalytic triad the 3D demo focuses', () => {
 })
 
 describe('the shell keeps the landing page outside the application chrome', () => {
-  it('renders the landing route bare', async () => {
-    vi.doMock('next/navigation', () => ({ usePathname: () => '/' }))
-    const { Shell } = await import('@/components/shell')
-    render(
-      <Shell demoMode={true}>
-        <p>content</p>
-      </Shell>,
+  /**
+   * The pathname is swapped through a module-level variable rather than by
+   * re-mocking and dynamically re-importing `Shell` per test.
+   *
+   * The dynamic-import version passed in isolation and timed out inside the
+   * full suite — `vi.doMock` plus `await import()` depends on a module registry
+   * that other test files have already touched, and the failure mode is a hang
+   * rather than a message. A hoisted `vi.mock` is applied before any import in
+   * this file resolves, so it does not care what ran first.
+   */
+  beforeEach(() => {
+    currentPath = '/'
+  })
+
+  function renderShell() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={client}>
+        <Shell demoMode={true}>
+          <p>content</p>
+        </Shell>
+      </QueryClientProvider>,
     )
+  }
+
+  it('renders the landing route bare', () => {
+    currentPath = '/'
+    renderShell()
     // No rail, and no demo bar: BRIEF.md §4 bans a marketing hero inside the
     // app, and this is what makes the landing page not be inside it.
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
     expect(screen.queryByText(/Demo data/)).toBeNull()
     expect(screen.getByText('content')).toBeInTheDocument()
-    vi.doUnmock('next/navigation')
   })
 
-  it('renders every other route inside the chrome', async () => {
-    vi.resetModules()
-    vi.doMock('next/navigation', () => ({ usePathname: () => '/projects' }))
-    const { Shell } = await import('@/components/shell')
-    render(
-      <Shell demoMode={true}>
-        <p>content</p>
-      </Shell>,
-    )
+  it('renders every other route inside the chrome', () => {
+    currentPath = '/projects'
+    renderShell()
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument()
     expect(screen.getByText(/Demo data/)).toBeInTheDocument()
-    vi.doUnmock('next/navigation')
   })
 })
-
 
 describe('the sequence the landing page renders', () => {
   /**

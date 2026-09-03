@@ -209,7 +209,7 @@ function ParsedObjective({
         </div>
         {!editing ? (
           <Button size="sm" onClick={() => setEditing(true)}>
-            <Pencil strokeWidth={1.5} />
+            <Pencil aria-hidden="true" strokeWidth={1.5} />
             Edit chips
           </Button>
         ) : null}
@@ -386,7 +386,7 @@ function ParsedObjective({
             disabled={pending || editing || goal.is_confirmed || goal.missing_required.length > 0}
             onClick={confirm}
           >
-            <Check strokeWidth={1.5} />
+            <Check aria-hidden="true" strokeWidth={1.5} />
             {goal.is_confirmed ? 'Confirmed' : 'Confirm objective'}
           </Button>
 
@@ -398,7 +398,7 @@ function ParsedObjective({
             title={runBlockedReason(goal) ?? undefined}
             onClick={startRun}
           >
-            {goal.is_confirmed ? <Play strokeWidth={1.5} /> : <Lock strokeWidth={1.5} />}
+            {goal.is_confirmed ? <Play aria-hidden="true" strokeWidth={1.5} /> : <Lock aria-hidden="true" strokeWidth={1.5} />}
             Start design run
           </Button>
 

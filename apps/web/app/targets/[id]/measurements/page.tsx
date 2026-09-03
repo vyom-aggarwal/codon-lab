@@ -32,7 +32,7 @@ export default async function MeasurementsPage({
           href={`/targets/${id}` as Route}
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           {target.name}
         </Link>
       </div>

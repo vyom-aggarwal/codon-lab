@@ -42,7 +42,7 @@ export default async function TargetPage({ params }: { params: Promise<{ id: str
           href={`/projects/${target.project_id}` as Route}
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           Back to project
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">

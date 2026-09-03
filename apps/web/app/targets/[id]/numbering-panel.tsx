@@ -132,7 +132,7 @@ function StructureSection({
               disabled={pending || !pdbId.trim()}
               onClick={() => attach({ source: 'pdb', identifier: pdbId })}
             >
-              <Download strokeWidth={1.5} />
+              <Download aria-hidden="true" strokeWidth={1.5} />
               Fetch
             </Button>
           </div>
@@ -404,7 +404,7 @@ function CanonicalSection({
 
       <div className="flex items-center gap-3">
         <Button variant="primary" disabled={pending || !selected} onClick={confirm}>
-          <Check strokeWidth={1.5} />
+          <Check aria-hidden="true" strokeWidth={1.5} />
           {pending ? 'Confirming…' : 'Confirm scheme'}
         </Button>
         {!selected ? (
@@ -412,7 +412,7 @@ function CanonicalSection({
         ) : null}
         {isDesignable ? (
           <span className="text-12 text-positive inline-flex items-center gap-1">
-            <Check className="size-4" strokeWidth={1.5} />
+            <Check aria-hidden="true" className="size-4" strokeWidth={1.5} />
             This target can be designed against.
           </span>
         ) : null}

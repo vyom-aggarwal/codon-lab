@@ -48,11 +48,12 @@ function card(overrides: Partial<Scorecard> = {}): Scorecard {
       { predicted: 4.5, measured: 2.5, count: 40 },
     ],
     points: [
-      { code: 'A1V', hgvs: 'p.Ala1Val', predicted: 2.5, measured: 0.5, replicates: 1 },
-      { code: 'A2V', hgvs: 'p.Ala2Val', predicted: 3.5, measured: 1.5, replicates: 1 },
-      { code: 'A3V', hgvs: 'p.Ala3Val', predicted: 4.5, measured: 2.5, replicates: 2 },
+      { variant_id: '00000000-0000-0000-0000-000000000001', code: 'A1V', hgvs: 'p.Ala1Val', predicted: 2.5, measured: 0.5, replicates: 1 },
+      { variant_id: '00000000-0000-0000-0000-000000000002', code: 'A2V', hgvs: 'p.Ala2Val', predicted: 3.5, measured: 1.5, replicates: 1 },
+      { variant_id: '00000000-0000-0000-0000-000000000003', code: 'A3V', hgvs: 'p.Ala3Val', predicted: 4.5, measured: 2.5, replicates: 2 },
     ],
     targets: ['Lipase EstA'],
+    target_count: 1,
     ...overrides,
   }
 }

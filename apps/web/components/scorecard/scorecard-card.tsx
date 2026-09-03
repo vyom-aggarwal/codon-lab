@@ -119,7 +119,15 @@ export function ScorecardCard({ card }: { card: Scorecard }) {
         <span className="text-text font-mono">{card.weights_hash.slice(0, 16)}…</span>
         {card.targets.length > 0 ? (
           <>
-            <span className="text-text-muted"> · Targets </span>
+            <span className="text-text-muted">
+              {' · '}
+              {card.target_count === 1 ? 'Target ' : `${card.target_count} targets `}
+            </span>
+            {/* The count comes from distinct target rows, the names from their
+                labels. They disagree whenever several targets share a name,
+                which repeated runs make common — and saying "Target Lipase
+                EstA" over eight pooled targets would misstate what the figures
+                above rest on. */}
             <span className="text-text">{card.targets.join(', ')}</span>
           </>
         ) : null}

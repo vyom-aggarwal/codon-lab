@@ -181,7 +181,7 @@ export function IntakePanel({ targetId }: { targetId: string }) {
           className="border-border rounded-control bg-surface text-13 text-text placeholder:text-text-faint focus:border-border-strong focus:ring-accent w-full p-2 font-mono focus:ring-2 focus:outline-none"
         />
         <label className="text-12 text-text-muted inline-flex cursor-pointer items-center gap-1.5">
-          <Upload className="size-4" strokeWidth={1.5} />
+          <Upload aria-hidden="true" className="size-4" strokeWidth={1.5} />
           <span>Choose a file</span>
           <input
             type="file"
@@ -424,7 +424,7 @@ export function IntakePanel({ targetId }: { targetId: string }) {
 
           <div className="flex items-center gap-3 pt-1">
             <Button onClick={() => void onImport()} disabled={!canImport}>
-              <Check className="size-4" strokeWidth={1.5} />
+              <Check aria-hidden="true" className="size-4" strokeWidth={1.5} />
               Import {preview.total_rows.toLocaleString()} measurements
             </Button>
             {direction === 'unset' ? (
@@ -506,7 +506,7 @@ function OffsetProposalPanel({
       className="border-warn/30 bg-warn/8 rounded-panel border p-4"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="text-warn mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
+        <AlertTriangle aria-hidden="true" className="text-warn mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
         <div className="space-y-2">
           <p className="text-13 font-strong text-text">
             This file looks like it is numbered {formatOffset(-proposal.offset)} than{' '}

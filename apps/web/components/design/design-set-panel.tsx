@@ -156,7 +156,7 @@ function MemberRow({
       </TableCell>
       <TableCell>
         <Button size="sm" variant="danger" onClick={onRemove}>
-          <Trash2 strokeWidth={1.5} />
+          <Trash2 aria-hidden="true" strokeWidth={1.5} />
           Remove
         </Button>
       </TableCell>

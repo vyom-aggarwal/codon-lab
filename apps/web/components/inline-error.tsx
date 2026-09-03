@@ -8,7 +8,7 @@ export function InlineError({ message, remedy }: { message: string; remedy: stri
   return (
     <div role="alert" className="border-negative/30 bg-negative/8 rounded-control border p-2">
       <div className="flex items-start gap-1.5">
-        <AlertTriangle className="text-negative mt-px size-4 shrink-0" strokeWidth={1.5} />
+        <AlertTriangle aria-hidden="true" className="text-negative mt-px size-4 shrink-0" strokeWidth={1.5} />
         <div className="space-y-0.5">
           <p className="text-12 text-text">{message}</p>
           <p className="text-12 text-text-muted">{remedy}</p>

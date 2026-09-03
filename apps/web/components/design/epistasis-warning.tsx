@@ -32,7 +32,7 @@ export function EpistasisWarningPanel({ warning }: { warning: EpistasisWarning }
       className="border-warn/30 bg-warn/8 rounded-panel border p-4"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="text-warn mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
+        <AlertTriangle aria-hidden="true" className="text-warn mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
         <div className="space-y-2">
           <p className="text-13 font-strong text-text">
             Stacked effects are assumed additive

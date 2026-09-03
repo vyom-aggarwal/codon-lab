@@ -3,9 +3,11 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-**Status current as of 2026-09-01.** Phase 8 is complete and committed on `main`.
-Phase 7's wet-lab handoff is still blocked and the blocker is named in §3 and §9;
-it is the only part of phases 1-8 that did not ship.
+**Status current as of 2026-09-02.** All nine phases are built and committed on
+`main`. **The build is not finished**, and the difference is the point: two
+clauses of `BRIEF.md` §10 are outstanding and one of them cannot be closed from
+an agent session at all. §12 walks §10 clause by clause with the evidence for
+each verdict; read it before claiming anything about completeness.
 
 > **The product is called Codon Lab.** It was renamed from CatalystAI on
 > 2026-09-01 — the code, the packages, the environment variables, the Postgres
@@ -43,12 +45,17 @@ colleague's notebook and never trusted enough to spend $4,000 of ordering budget
 on. The gap being closed is **trust**, not capability.
 
 It is a solo build by the repo owner (`vyom-aggarwal`), executed across multiple
-assistant sessions against a fixed nine-phase plan in `BRIEF.md` §9. **Phases 1–8
-of 9 are complete and committed**, with one exception: Phase 7's wet-lab handoff
-exports do not ship, and are blocked on something the data model does not have
-(§3). Phase 9 — Playwright smoke flows, the a11y pass, screenshots — is
-untouched apart from the README, which was pulled forward. Nothing is deployed;
-everything runs locally under Docker on the owner's Windows 11 machine.
+assistant sessions against a fixed nine-phase plan in `BRIEF.md` §9. **All nine
+phases are built.** Two things are not: Phase 7's wet-lab handoff exports, which
+are blocked on something the data model does not have (§3), and the PDF export
+`BRIEF.md` §10 names, which belongs to the same blocked screen. Nothing is
+deployed; everything runs locally under Docker on the owner's Windows 11
+machine.
+
+**The single most important open item is not a code task.** Nobody has looked at
+a screen with a design eye. `BRIEF.md` §4 sets the bar — a structural biologist
+opens this next to Benchling and it does not look like the odd one out — and no
+gate can judge that. §12 records it as unverifiable rather than met.
 
 ---
 
@@ -116,7 +123,7 @@ to know.
 ### Works end to end, verified
 
 - **Phases 1–8 complete**, each with an exit gate asserted in
-  `scripts/verify_gates.py` (**225 checks**, over HTTP, against a live stack).
+  `scripts/verify_gates.py` (**238 checks**, over HTTP, against a live stack).
   Phase 7's wet-lab handoff is the one gap — §9.1.
 - **The Phase 7 design set builder works end to end.** Select variants into a set,
   stack them combinatorially, and every stacked design carries its 8 Å pair flags
@@ -168,6 +175,50 @@ to know.
   renders with the whole stack down. Every figure on it is one this build
   measured. `DESIGN.md` §12 and §13 hold the rules; three deviations from the
   brief are named in §6.
+- **Phase 9 ships: keyboard access, `⌘K`, the `?` sheet, an enforced contrast
+  audit, three Playwright flows and regenerable screenshots.** `DESIGN.md` §9's
+  two deferred devices are built and §9 now says so. The a11y pass audited the
+  landing page and eight application screens as served: **every focusable element has an accessible name,
+  every screen has exactly one visible `<h1>`, no positive `tabindex`, no
+  unlabelled input, no heading-level skip.** 38 decorative icons across 27 files
+  gained `aria-hidden`.
+- **The contrast audit is now a gate rather than a paragraph, and it caught a
+  documented lie.** `DESIGN.md` §1.3 had claimed `--accent` on `--surface` was
+  **8.6:1, AAA** since Phase 1. It is **6.70:1, AA**. Every ratio in both themes
+  is now recomputed from `tokens.css` on each build by
+  `apps/web/test/contrast.test.ts` (35 tests over 30 pairs), which fails if the
+  table disagrees. Dark is
+  audited too, and one pair — `--accent` on `--accent-sunk`, 4.23:1 — is
+  recorded as failing AA but **latent**, since no dark surface in the product
+  contains a table.
+- **The landing page's primary call to action was dead, and only a real
+  browser could see it.** Found during the Phase 9 screenshot run. The hero's
+  Mol* viewer ran a perpetual `trackball.animate` spin, redrawing a scene that
+  cost **~65 ms a frame** even at 358x358. That saturated the main thread badly
+  enough to starve the Next router: clicking **"Open the workbench" did nothing
+  at all** — no error, no console message, the URL simply never changed — and
+  even assigning `window.location` could not complete. Measured, not inferred:
+  under `prefers-reduced-motion: reduce`, where the code already declines to
+  start the spin, the same click navigated and a frame cost 14 ms. Fixed by
+  dropping the ambient spin and turning off temporal multisampling and
+  screen-space occlusion; a frame is now vsync (~16.6 ms) and the model is still
+  fully interactive. Guarded by `e2e/landing-cta.spec.ts`. **Nothing else in the
+  suite could have caught this** — the gate reads served HTML, which was
+  correct, and jsdom has neither WebGL nor a frame budget.
+- **Playwright catches a mutation jsdom passes.** §8 has long recorded that
+  hiding the Trace control behind a closed `<details>` — a genuine third click —
+  passes the jsdom two-clicks test, because jsdom keeps closed `<details>`
+  contents in the tree. That mutation was re-run against the Playwright flow and
+  **failed**, which is the whole reason the flow exists.
+- **A Phase 8 defect was found and fixed during the Phase 9 audit.** The
+  scorecard used the mutation code as a pair's identity. On a card pooled across
+  targets, codes collide: the live lab-wide card reported **n = 192 while
+  carrying 24 distinct codes**, so React dropped the duplicates and the scatter
+  drew 24 marks under a caption claiming 192 — and `precision@k` credited one
+  variant's rank with another's measurement. `Paired` now carries a `key`
+  separate from its display `code`, `PointView` carries `variant_id`, and the
+  corrected precision for one seeded card moved from **0.4 to 0.2**. It was
+  visible in the browser console as a duplicate-key warning and nowhere else.
 - **Gates re-run 2026-09-02 after the landing page landed:** **225 gate checks,
   0 failures** against the live stack; **162 vitest across 10 files**; ruff and
   mypy clean on 69 files; `pnpm typecheck` and `pnpm lint` clean. The host
@@ -315,7 +366,7 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 | `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
 | `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
 | `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
-| `scripts/verify_gates.py`                         | 225 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
+| `scripts/verify_gates.py`                         | 238 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
 | `apps/api/codonlab/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
 | `apps/api/codonlab/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
 | `apps/api/codonlab/domain/joining.py`             | Matching bench rows to variants          | No similarity threshold anywhere. The offset proposal is unanimous-and-unique, so there is no fraction to set wrong |
@@ -390,12 +441,38 @@ pip install -e ".[models]"       # torch + transformers, several GB
 ### Tests and gates
 
 ```powershell
-pnpm typecheck; pnpm lint; pnpm test                   # 162 vitest across 10 files
-cd apps\api; .venv\Scripts\python -m pytest -q        # 396 pass, 6 skipped, 1 known fail
+pnpm typecheck; pnpm lint; pnpm test                   # 210 vitest across 12 files
+cd apps\api; .venv\Scripts\python -m pytest -q        # BLOCKED on this host, see below
 cd apps\api; .venv\Scripts\python -m ruff check .     # clean
 cd apps\api; .venv\Scripts\python -m mypy codonlab    # strict, clean, 69 files
-python scripts\verify_gates.py                        # 225 checks, needs the live stack
+python scripts\verify_gates.py                        # 238 checks, needs the live stack
+pnpm --filter @codonlab/web e2e                       # 6 Playwright flows, needs the stack
 ```
+
+**Run pytest inside the api container.** The host suite cannot collect four
+modules — a machine policy blocks biotite's compiled extensions (§8). The
+container carries its own biotite and is unaffected:
+
+```powershell
+docker compose exec -T api sh -c "pip install -q pytest && cd /app && python -m pytest -q"
+```
+
+That returns **399 passed, 6 skipped, 1 known failure** (the ESM/torch one, open
+thread 12). The image does not ship `[dev]`, so pytest is installed into the
+running container; it is lost on rebuild, which is fine for a verification step.
+
+**Run pytest inside the api container.** The host `.venv` cannot collect four
+test modules: a machine policy blocks biotite's compiled extensions (section 8).
+The container carries its own biotite and is unaffected.
+
+```powershell
+docker compose exec -T api sh -c "pip install -q pytest && cd /app && python -m pytest -q"
+```
+
+That returns **399 passed, 6 skipped, 1 known failure** (the ESM/torch one,
+open thread 12). The image does not install the `[dev]` extra, so pytest is
+installed into the running container and is lost on rebuild. That is fine for a
+verification step, and it is the only way the suite runs on this machine today.
 
 **Invoke the Python tools as `python -m <tool>`, not through
 `.venv\Scripts\<tool>.exe`.** A Windows Application Control policy on this
@@ -846,67 +923,96 @@ UPDATE run SET status='CANCELLED', error='abandoned' WHERE status='RUNNING';
 
 ## 9. Open threads
 
-Ranked by priority. **Phase 8 closed the fuzzy-join question** — the owner
-delegated it back on 2026-09-01 and the answer is recorded in
-`ARCHITECTURE.md` §17.1 with what would change it.
+Ranked by priority, and **the order changed at the end of Phase 9**. The top
+item is no longer a code task. Everything a machine can check about this build
+is checked; what is left at the top is the one judgement no gate can make.
 
-1. **The wet-lab handoff has no template DNA to design against.** Still the top
-   of this list, and now the only thing standing between the build and a
-   complete `BRIEF.md` §5. `BRIEF.md` §5.8 assumes site-directed mutagenesis
+1. **Nobody has looked at a single screen with a design eye — and this now
+   blocks the definition of done, not just a phase.** `BRIEF.md` §4 sets the bar
+   ("a structural biologist opens this next to Benchling and it does not look
+   like the odd one out") and §10's last clause repeats it. No test can evaluate
+   it. The assistant has driven every screen in a real browser across Phases 8
+   and 9 and they render **correctly** — the scorecard's four-figure row, the
+   offset proposal, the calibration curve, the workbench at 4,000 rows — but
+   *correct* and *good* are different claims and only the first has ever been
+   checked.
+
+   The owner was asked directly at the start of Phase 9 to walk the screens and
+   report back. They answered the delegation question in the same message
+   ("whichever one results in the strongest and best possible app") but **did
+   not report on the screens**, so this is still open. It is recorded in §12 as
+   **unverifiable from an agent session** rather than met. Open
+   <http://localhost:3000> and look; the fix for anything found is small and
+   local, and the person who can see it has not seen it yet.
+
+2. **The wet-lab handoff has no template DNA to design against.** The only thing
+   standing between the build and a complete `BRIEF.md` §5, and — via the PDF
+   clause — a complete §10. `BRIEF.md` §5.8 assumes site-directed mutagenesis
    primers are designable; the data model has no DNA and neither seeded target
    has any. A primer anneals to the construct actually on the bench, so this
    cannot be worked around by back-translating the protein — that would produce
    a plausible sequence that is not the user's plasmid.
 
-   **The owner delegated this on 2026-09-01 along with the Phase 8 question.**
-   The decision taken, and recorded here rather than in `ARCHITECTURE.md`
-   because nothing is built yet: **the coding sequence is pasted by the user**,
-   stored on a new `Target.coding_sequence`, and validated by translating it and
-   asserting it matches the protein already stored. It is the only source that
-   is genuinely the construct on the bench, which is the whole point of the
-   screen. ENA/EMBL cross-reference was rejected because it returns the
-   *reference* CDS — usually codon-optimised differently and often tagged — and
-   primers designed against it may not anneal to the user's plasmid; if it is
-   ever added it must be badged reference-derived and not trusted for ordering.
+   **The owner delegated this on 2026-09-01.** The decision taken, recorded here
+   rather than in `ARCHITECTURE.md` because nothing is built yet: **the coding
+   sequence is pasted by the user**, stored on a new `Target.coding_sequence`,
+   and validated by translating it and asserting it matches the protein already
+   stored. It is the only source that is genuinely the construct on the bench,
+   which is the whole point of the screen. ENA/EMBL cross-reference was rejected
+   because it returns the *reference* CDS — usually codon-optimised differently
+   and often tagged — and primers designed against it may not anneal to the
+   user's plasmid; if it is ever added it must be badged reference-derived and
+   not trusted for ordering.
 
    **Nothing is implemented.** The column, the translation validator, the paste
-   UI and the primer designer are all still to build. `ARCHITECTURE.md` §16.1
-   already holds the primer chemistry. Start with the validator: it is the
-   valuable half and it is testable before the attachment UI exists.
+   UI, the primer designer and the PDF export are all still to build.
+   `ARCHITECTURE.md` §16.1 already holds the primer chemistry. Start with the
+   validator: it is the valuable half and it is testable before any UI exists.
 
-2. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
+3. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
+   The lipase used 93% of it; the seeded luciferase (P08659) needs ~142 min at
+   the observed rate, so **it cannot be run at all today**. **Delegated back on
+   2026-09-01.** The decision taken: **make the scoring stage resumable** rather
+   than raising the cap, which is what `ARCHITECTURE.md` §14.1 already names as
+   the better fix.
+
+   **Not implemented, and Phase 9 deliberately did not implement it.** The cost
+   is now understood precisely, which is the useful thing this phase added:
+
+   - `_stage_score` calls `predictor.score(state.candidates, state.ctx)` **once
+     over the whole candidate set** and only then calls `_write_scores`. A killed
+     run has therefore written nothing, which is why there is nothing to resume
+     from — the timeout is a symptom, the single-shot call is the cause.
+   - `_reuse_scores(session, run=..., version=..., input_hash=...)` already
+     exists and already reuses scores across runs on a matching input hash. It
+     is the resume mechanism; it just never has partial work to find.
+   - So the change is: chunk `state.candidates`, write and commit each chunk, and
+     let `_reuse_scores` skip what is already stored. The ESM provider already
+     iterates positions internally, so chunking by position is natural.
+
+   It was left out because `services/runs.py` is the file every run flows
+   through and the only place a `Score` is created (§4), the host test suite
+   cannot run against it on this machine (§5), and restructuring it in the last
+   hours of the last phase trades a known-good pipeline for an unverified one.
+   That is a judgement, not a rule — **the constant has still not been edited**,
+   and the next session should do this first, with the container suite green
+   before and after.
+
+4. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
    interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give, and a
    stacked design has none either. Raised three times; **delegated back on
-   2026-09-01** with the rest. The decision taken: **keep refusing and state the
-   absence** — `reports_interval=False` with its reason, and
-   `AdditiveEstimate.interval_note` for stacked totals. A benchmark RMSE dressed
-   as a per-variant interval is a fabricated number wearing a real one's
-   appearance, and it would render identically to a real interval on screen.
+   2026-09-01**. The decision taken: **keep refusing and state the absence** —
+   `reports_interval=False` with its reason, and `AdditiveEstimate.interval_note`
+   for stacked totals. A benchmark RMSE dressed as a per-variant interval is a
+   fabricated number wearing a real one's appearance, and it would render
+   identically to a real interval on screen.
 
    This leaves `BRIEF.md` §7's requirement **formally unmet, visibly**, which is
-   the honest state rather than a papered-over one. Phase 8 opens a real route
+   the honest state rather than a papered-over one. Phase 8 opened a real route
    to closing it: once the scorecard accumulates enough measurements, the
    residual spread per predictor per target class *is* an empirically grounded
    interval. That needs an owner decision on the minimum n before a band is
    shown, and it is not built.
-
-3. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
-   The lipase used 93% of it; the seeded luciferase (P08659) needs ~142 min at
-   the observed rate. **Delegated back on 2026-09-01.** The decision taken:
-   **make the scoring stage resumable** rather than raising the cap, which is
-   what `ARCHITECTURE.md` §14.1 already names as the better fix. **Not
-   implemented** — it is real work in `services/runs`, it was outside Phase 8's
-   scope, and the constant has deliberately not been edited in the meantime. Do
-   this before anyone runs a large target.
-
-4. **Nobody has looked at a single screen with a human eye.** `BRIEF.md` §4 is
-   emphatic about how this must look and that judgement has never been made.
-   Phase 8 added two more unlooked-at screens (results intake, the scorecard).
-   The assistant has now driven both in a real browser and they render
-   correctly — the scorecard's four-figure row, the offset proposal panel, the
-   calibration curve — but *correct* and *good* are different claims and only
-   the first has been checked. Ask the owner to open <http://localhost:3000>.
-   This should happen before Phase 9.
 
 5. **"Per target class" in the scorecard is unimplemented.** `BRIEF.md` §5.9
    asks for a scorecard "per predictor per target class". The data model has no
@@ -975,38 +1081,65 @@ delegated it back on 2026-09-01 and the answer is recorded in
     2,172 measurements on first boot, and that path has only been exercised
     against an already-migrated database.
 
+18. **One dark-theme colour pair fails AA, latently.** `--accent` on
+    `--accent-sunk` is **4.23:1** against the 4.5:1 floor.
+    `apps/web/test/contrast.test.ts` asserts the failure rather than hiding it,
+    and `DESIGN.md` §1.3 records it, because the pair is **not currently
+    rendered**: `--accent-sunk` is a table-row selection fill and no dark
+    surface in the product contains a table. It becomes a real defect the moment
+    one does. Fix by lightening `--accent` in dark or darkening `--accent-sunk`;
+    do not fix by deleting the test.
+
+19. **The a11y pass covered structure and keyboard reach, not assistive
+    technology.** What is asserted: accessible names on every focusable element,
+    one `<h1>` per screen, no positive `tabindex`, no unlabelled input, no
+    heading-level skip, full keyboard traversal of the workbench, and every
+    ratio in `tokens.css` recomputed on each build. What is **not** asserted,
+    and what nobody has done: opening the app in NVDA, JAWS or VoiceOver and
+    listening to it. A screen that passes every structural check can still be
+    incoherent read aloud, and §12 records the clause as met only for the part
+    that was measured.
+
+20. **The screenshots in the README are regenerable but not regenerated on
+    demand.** `pnpm --filter @codonlab/web screenshots` takes them from the live
+    stack against subjects it picks out of the database, so they cannot drift
+    silently on a machine that runs it — but nothing *makes* anyone run it. If a
+    screen changes, re-run it in the same commit.
+
 ---
 
 ## 10. Immediate next steps
 
+The nine-phase plan is finished. There is no Phase 10, so this list is no longer
+"the next phase" — it is what stands between the current state and the build
+being genuinely done, in the order it should be attacked.
+
 1. **Verify the gates before changing anything.** `docker compose up -d`, then
-   `python scripts/verify_gates.py` (**225 checks**). Also run the per-package
-   gates in §5, invoking the Python tools as `python -m <tool>`. One pytest
-   failure is expected and is not yours (§8). If anything else is red, **stop
-   and report** — do not proceed.
+   `python scripts/verify_gates.py` (**238 checks**). Then the per-package gates
+   in §5: `pnpm typecheck`, `pnpm lint`, `pnpm test` (210), `pnpm --filter
+   @codonlab/web e2e` (6), and pytest **in the container** (399 pass, 6 skipped,
+   1 known failure). If anything else is red, **stop and report**.
 
-2. **Phase 9 is what remains of the plan**: Playwright smoke flows, the a11y
-   pass (keyboard-only traversal of the workbench, contrast audit), and accurate
-   screenshots. The README was pulled forward and is already written and
-   audited — keep it that way rather than rewriting it.
+2. **Get the owner to walk the screens** (§9.1). This is now the top item in the
+   build. It is the one clause of `BRIEF.md` §10 that no gate can reach, it is
+   recorded in §12 as unverifiable rather than met, and every hour spent on code
+   before it is an hour spent without knowing whether the thing looks right.
 
-3. **Before or alongside Phase 9, close the three decided-but-unbuilt threads**,
-   in this order, because each is now a decision with no open question in front
-   of it:
-   - **Resumable scoring** (§9.3). Do this first: without it a 550-residue
-     target cannot be run at all, and one is already seeded.
-   - **`Target.coding_sequence` plus the translation validator** (§9.1). The
-     validator is the valuable half and is testable before any UI exists. Then
-     the paste field, then the primer designer against
-     `ARCHITECTURE.md` §16.1.
-   - **A cost-basis UI** (§9.7), so the budget panel can show a total.
+3. **Resumable scoring** (§9.3). The first code task, because a seeded target
+   cannot be run at all without it. §9.3 now carries the exact shape of the
+   change and why it was not taken during Phase 9.
 
-4. **Get a human to look at the screens** (§9.4). This is the largest unmeasured
-   risk in the build and it needs a person, not another gate.
+4. **`Target.coding_sequence` plus the translation validator** (§9.2), then the
+   paste field, then the primer designer against `ARCHITECTURE.md` §16.1, then
+   the PDF export. This is one chain and it closes both the §5.8 gap and the
+   `BRIEF.md` §10 clause that depends on it (§12, clause 6).
 
-5. **Then close the loop as the working agreement requires**: extend
-   `scripts/verify_gates.py` with the new phase's exit gate, update this file in
-   the **same commit**, run every gate, fix everything red, commit with a real
+5. **A cost-basis UI** (§9.7), so the budget panel can show a total instead of
+   its reason.
+
+6. **Then close the loop as the working agreement requires**: extend
+   `scripts/verify_gates.py` with a gate for whatever was built, update this file
+   in the **same commit**, run every gate, fix everything red, commit with a real
    message, and stop and check in.
 
 ---
@@ -1030,3 +1163,169 @@ delegated it back on 2026-09-01 and the answer is recorded in
 | The measured DMS itself           | doi:10.1021/acs.jcim.9b00954                                  | Nutschel et al. 2020, *J. Chem. Inf. Model.* 60(3) — T50 in °C for lipase A |
 
 No dashboards, no ticketing system, no CI service — everything is local.
+
+---
+
+## 12. `BRIEF.md` §10 — the definition of done, clause by clause
+
+`BRIEF.md` §10 is the owner's definition of done. This is the required
+final-phase walkthrough: every clause, with a verdict and the evidence behind
+it. **Three verdicts are used and they mean different things.** *Met* means a
+gate or a test asserts it and it passes. *Not met* means it is absent and that
+is known. *Unverifiable from an agent session* means the claim may well be true
+but nothing in this session could establish it — it is not a soft "met", and it
+must not be read as one.
+
+**Summary: 6 met, 1 met with a stated limit, 2 not met, 1 unverifiable.**
+
+### Clause 1 — "A structural biologist can go from a UniProt accession to a ranked, constrained, explainable design set without writing code."
+
+**Met.** Asserted end to end by `scripts/verify_gates.py`, which drives the real
+HTTP API from accession to design set on every run: create project → add target
+`P37957` → confirm numbering → parse and confirm a goal → start a run → poll to
+`succeeded` → read ranked scores → apply constraints → build a design set. The
+the confirmation-gate and two-clicks flows drive the same path through the browser with trusted
+events. No step requires code from the user.
+
+### Clause 2 — "Every number on screen traces to the model version and weights that produced it, in at most two clicks."
+
+**Met, and counted rather than asserted.** `apps/web/test/two-clicks.test.tsx`
+counts click events rather than checking that a drawer exists — the correction
+§7 records the owner making. `apps/web/e2e/two-clicks.spec.ts` re-counts them
+with `event.isTrusted` in a real browser that lays the page out, which catches a
+mutation jsdom passes (hiding the control inside a closed `<details>`). The
+drawer is checked for the **weights** hash specifically, by a locator tight
+enough that matching the model id instead fails. A second test asserts every row
+reaches *its own* trace, not the first row's — the mutation §8 records passing
+six tests.
+
+### Clause 3 — "No run can start from an objective the user did not agree to."
+
+**Met, at the layer that matters.** Enforced in
+`services/goals.require_confirmed`, not in a route, because the job queue is a
+second caller that would route around a route-level check. Asserted three ways:
+over HTTP in `verify_gates.py` (400 with a reason naming confirmation), in the
+service tests, and through the UI in
+`apps/web/e2e/confirmation-gate.spec.ts`, which additionally asserts the run
+button is **disabled with its reason on screen** before confirmation and enabled
+after — because an API that refuses correctly while the UI invites the click
+still teaches the user that the affordances lie.
+
+### Clause 4 — "Fabricated or demo data is impossible to mistake for real data."
+
+**Met.** A persistent bar renders on **every application screen** whenever a
+fabricating provider is active — Phase 4 asserted it on two screens; the Phase 9
+gate asserts it on all eight it fetches, against served HTML. The landing page has no bar
+and correspondingly displays no scores. Provenance is structural rather than
+cosmetic: `weights_hash` is a SHA-256 of the bytes actually loaded and is never
+a placeholder, and `reports_interval=False` carries its reason rather than
+rendering an invented interval. The screenshot script deliberately does not crop
+the bar out.
+
+### Clause 5 — "The scorecard shows predicted versus measured with an error term and a bias term, not a correlation alone."
+
+**Met, and this one has teeth.** `ARCHITECTURE.md` §13 exists because a
+correlation was caught validating nothing (r rose to 0.998 while 8 residues
+moved across a boundary). `domain/scorecard.build()` is the only entry point and
+always carries Spearman, precision@k, MAE and mean signed error together, with
+bias rendered visually adjacent to rank. `commensurable()` gates the absolute
+error terms on unit **and** sign-convention equality and returns a stated reason
+when they are withheld. Seeded with 2,172 real ProteinGym T50 measurements,
+which exercise the rank path and the refusal path honestly: T50 in °C is not
+commensurable with any predictor's metric, so MAE reads `—` with its reason
+(§9.8). A precision@k defect found during the Phase 9 audit is fixed (§3).
+
+### Clause 6 — "A wet-lab scientist can take the output to the bench: a plate map, primers, and a one-page PDF."
+
+**Not met.** The design set builder and the plate map ship; the primers and the
+PDF do not. The blocker is single and named: the data model has no template DNA
+(§9.2), a primer anneals to the construct actually on the bench, and
+back-translating the protein would produce a plausible sequence that is not the
+user's plasmid. The decision is taken (user-pasted coding sequence, validated by
+translation) and nothing is implemented. **This clause is knowingly open**, and
+the owner was asked at the start of Phase 9 whether to close the phase with it
+outstanding.
+
+### Clause 7 — "The interface is keyboard-navigable and meets WCAG AA."
+
+**Met for what was measured; the limit is stated.** Keyboard: `test/keyboard.test.tsx`
+drives the workbench end to end with `userEvent.keyboard` and never a click —
+`⌘K` opens the command palette, `?` opens the shortcut sheet (and is ignored
+while a text field has focus), the table, inspector and trace drawer are all
+reachable and dismissible. The structural audit over nine served screens (the landing page and eight
+application screens) found
+every focusable element named, exactly one visible `<h1>` per screen, no
+positive `tabindex`, no unlabelled input and no heading-level skip; 38
+decorative icons across 27 files were given `aria-hidden`. Contrast:
+`test/contrast.test.ts` recomputes all 30 documented ratios from `tokens.css`
+on every build, across 35 tests, and fails if `DESIGN.md` §1.3 disagrees — which is how a documented
+**8.6:1 AAA** claim that has been false since Phase 1 was caught (it is 6.70:1,
+AA). One dark pair fails AA at 4.23:1 and is recorded, not hidden, because it is
+not currently rendered (§9.18).
+
+**The limit:** this is structure and computed contrast. **Nobody has opened the
+app in a screen reader** (§9.19). "Meets WCAG AA" is asserted here for the
+machine-checkable part of AA only.
+
+### Clause 8 — "The app looks like it was made by a design team that has never heard of a landing page."
+
+**Unverifiable from an agent session — and this is the clause to read carefully,
+because a landing page now exists.** The owner asked for one after the brief was
+written, so the constraint changed shape: it is no longer satisfied by absence
+and is now a boundary that has to hold. Mechanically, it does. `Shell` switches
+on pathname and renders `/` bare, outside the application chrome. The Phase 9
+gate asserts against served HTML that every application screen is inside the
+application chrome and that none carries the landing hero copy, a display type size (`text-32/44/56`), or
+any banned decorative device (`bg-gradient-`, `backdrop-blur`, `rounded-3xl`);
+`tokens.test.ts` fails the build if a display size appears outside
+`components/landing/`. **No marketing pattern has leaked into the nine screens**
+— that specific question is answered, and the answer is no.
+
+The landing page did, however, ship a defect that no gate could see and that a
+human eye would have caught in seconds: its primary call to action did nothing,
+because the hero's 3D viewer was starving the router (§3, §8). It is fixed and
+guarded. It is also the strongest available argument for the paragraph below —
+the page passed every automated check in the build while being unusable.
+
+What cannot be answered here is the clause itself, which is an aesthetic
+judgement about whether the application *looks* like serious tooling. No test
+can make it. The owner was asked at the start of Phase 9 to walk the screens and
+report back, and has not yet. **This clause is recorded as unverified, not as
+met** (§9.1).
+
+### Clause 9 — "Nothing in the interface implies a confidence the model does not have."
+
+**Met, and enforced in more than one place.** Agreement between predictors is
+never labelled confidence — `ARCHITECTURE.md`'s standing rule, because
+predictors trained on overlapping data share their biases. Consensus is a mean
+of normalised ranks, never of scores, and is **not stored**, because storing it
+would require fabricating a `ModelVersion`. `reports_interval=False` renders the
+absence of an interval rather than a benchmark RMSE dressed as one — which is
+why `BRIEF.md` §7's interval requirement is **formally unmet and visibly so**
+(§9.4) rather than quietly satisfied by an invented number. The scorecard
+withholds MAE with a reason rather than computing it across incommensurable
+units.
+
+### Clause 10 — "`README.md` is accurate."
+
+**Met at the moment of this commit, and mechanically re-checkable.** The README
+was written claim by claim against the code and every count in it is a number a
+gate produces: 238 gate checks, 210 vitest, 6 Playwright, 399 pytest. The
+screenshots are generated by `pnpm --filter @codonlab/web screenshots` from the
+live stack, against subjects the script finds in the database rather than
+hard-coded ids, so regenerating them is one command and a stale one is a diff.
+It documents what does **not** work — the primers, the PDF, the ΔΔG interval —
+in the README itself rather than only here. The standing risk is ordinary
+drift: nothing forces the screenshots to be re-run (§9.20).
+
+---
+
+### What this adds up to
+
+Eight of ten clauses are closed. One is knowingly open behind a single named
+blocker with the decision already taken (clause 6). One cannot be closed by
+anyone in an agent session and is waiting on the owner's eyes (clause 8).
+
+The honest one-line summary is: **the build does what it claims, refuses what it
+cannot support, and has never been looked at by someone who can judge whether it
+looks right.**

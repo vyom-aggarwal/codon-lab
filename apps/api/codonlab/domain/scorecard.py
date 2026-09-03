@@ -61,15 +61,30 @@ DEFAULT_CALIBRATION_BINS = 10
 class Paired:
     """One variant with both a prediction and a measurement.
 
-    ``code`` is the canonical mutation code. ``predicted`` and ``measured`` are
-    the raw values in each side's own units and own sign convention — nothing is
-    normalised on the way in, so what a statistic did to them stays visible in
-    this module rather than happening at the call site.
+    ``code`` is the canonical mutation code and is for **display only**.
+    ``key`` is what identifies the pair, and the two are deliberately separate:
+    a pooled scorecard spans several targets, and two different proteins can
+    both have an ``A1N``. Using the code as identity silently collapsed them —
+    on this machine one card reported 192 pairs while carrying 24 distinct
+    codes, so the scatter drew 24 marks under a caption claiming 192 and
+    precision@k counted one code eight times. Callers pass the variant id.
+
+    ``predicted`` and ``measured`` are the raw values in each side's own units
+    and own sign convention — nothing is normalised on the way in, so what a
+    statistic did to them stays visible in this module rather than happening at
+    the call site.
     """
 
     code: str
     predicted: float
     measured: float
+    #: Unique per pair. Defaults to the code so existing hermetic tests, which
+    #: never pool across targets, stay meaningful without restating it.
+    key: str = ""
+
+    @property
+    def identity(self) -> str:
+        return self.key or self.code
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,25 +231,31 @@ def precision_at_k(
     is that the question cannot be asked yet, not a number scaled to look like
     it can.
 
-    Ties at the boundary are resolved by the canonical code so the same data
+    Ties at the boundary are resolved by the pair's identity so the same data
     always yields the same set, rather than one that depends on sort stability.
+
+    Membership is tested on ``identity``, never on the displayed code. Two
+    targets can carry the same mutation code, and matching on the code would
+    let one variant's rank credit another variant's measurement — inflating
+    precision for exactly the pooled, cross-target card the statistic is most
+    often read on.
     """
     if k <= 0 or len(pairs) < k:
         return None
 
-    def best(by: str, higher_is_better: bool) -> list[str]:
+    def best(by: str, higher_is_better: bool) -> list[Paired]:
         ordered = sorted(
             pairs,
             key=lambda pair: (
                 -getattr(pair, by) if higher_is_better else getattr(pair, by),
-                pair.code,
+                pair.identity,
             ),
         )
-        return [pair.code for pair in ordered[:k]]
+        return ordered[:k]
 
     top_predicted = best("predicted", predicted.higher_is_better)
-    top_measured = set(best("measured", measured.higher_is_better))
-    hits = tuple(code for code in top_predicted if code in top_measured)
+    top_measured = {pair.identity for pair in best("measured", measured.higher_is_better)}
+    hits = tuple(pair.code for pair in top_predicted if pair.identity in top_measured)
     return PrecisionAtK(k=k, value=len(hits) / k, hits=hits)
 
 

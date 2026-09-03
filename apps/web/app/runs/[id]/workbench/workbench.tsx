@@ -170,7 +170,7 @@ export function Workbench({
           <Popover>
             <PopoverTrigger asChild>
               <Button size="sm">
-                <Columns3 strokeWidth={1.5} />
+                <Columns3 aria-hidden="true" strokeWidth={1.5} />
                 Columns
               </Button>
             </PopoverTrigger>

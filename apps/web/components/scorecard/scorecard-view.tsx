@@ -43,7 +43,7 @@ export function ScorecardView({
             href={`/targets/${targetId}/measurements` as Route}
             className="border-border rounded-control text-13 text-text hover:bg-surface-sunk h-control inline-flex items-center gap-1.5 border px-2"
           >
-            <FileUp className="size-4" strokeWidth={1.5} />
+            <FileUp aria-hidden="true" className="size-4" strokeWidth={1.5} />
             Import measured results
           </Link>
         ) : null}

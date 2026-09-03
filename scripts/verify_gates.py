@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -46,6 +47,7 @@ ACCESSION = "P37957"  # B. subtilis lipase A: a 31-residue signal peptide, so th
 RUN_TIMEOUT_SECONDS = 180
 
 failures = 0
+checks = 0
 
 
 def call(
@@ -115,12 +117,27 @@ def await_run(run_id: str) -> dict:
 
 
 def step(label: str, ok: bool, detail: str = "") -> None:
-    global failures
+    global failures, checks
+    checks += 1
     if not ok:
         failures += 1
     mark = "PASS" if ok else "FAIL"
     suffix = f"  {detail}" if detail else ""
     print(f"  [{mark}] {label}{suffix}")
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def read_repo_file(*parts: str) -> str:
+    """Read a file from the repository. Returns "" if it is not there, so a
+    moved file fails the step that reads it rather than the whole run."""
+    path = os.path.join(REPO_ROOT, *parts)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return ""
 
 
 def section(title: str) -> None:
@@ -1133,6 +1150,161 @@ def main() -> int:
          after["rows"][0]["outcome"] in {"wild_type_mismatch", "unknown_position"}
          and reschemed["canonical_scheme_label"] in after["rows"][0]["detail"],
          after["rows"][0]["outcome"])
+
+
+    # ======================================================================= #
+    # Phase 9 — accessibility, and the boundary the landing page must not cross
+    # ======================================================================= #
+    #
+    # What this section can and cannot see is worth stating, because the
+    # difference is where the rest of Phase 9's evidence lives.
+    #
+    # It reads **served HTML**. That covers document language, heading
+    # structure, landmark naming, and whether a marketing pattern has leaked
+    # into an application screen — all of which are server-rendered and all of
+    # which a screen reader meets first.
+    #
+    # It cannot see the command palette or the shortcut sheet: both are client
+    # components inside `Shell`, so they exist only after hydration. Their
+    # behaviour is asserted in `apps/web/test/keyboard.test.tsx`, which drives
+    # them with `userEvent.keyboard` and never a click. Nor can it see focus
+    # rings or contrast — `contrast.test.ts` recomputes every ratio from
+    # `tokens.css` on each build. Nor trusted clicks, which is what the
+    # Playwright flows in `apps/web/e2e` exist for.
+
+    section("Phase 9: every screen is navigable before any script runs")
+    a11y_screens = [
+        ("landing", f"{WEB}/"),
+        ("projects", f"{WEB}/projects"),
+        ("target", f"{WEB}/targets/{target_id}"),
+        ("constraints", f"{WEB}/targets/{target_id}/constraints"),
+        ("goal composer", f"{WEB}/targets/{target_id}/goal"),
+        ("run view", f"{WEB}/runs/{run['id']}"),
+        ("workbench", f"{WEB}/runs/{run['id']}/workbench"),
+        ("results intake", f"{WEB}/targets/{target_id}/measurements"),
+        ("scorecard", f"{WEB}/targets/{target_id}/scorecard"),
+    ]
+    pages = {name: fetch_html(url) for name, url in a11y_screens}
+
+    step("every screen declares its language",
+         all('lang="en"' in page for page in pages.values()),
+         f"{len(pages)} screens")
+
+    # Exactly one <h1>, counting only what assistive technology can reach.
+    #
+    # A streamed route serves **two** copies of itself: the `loading.tsx`
+    # skeleton, visible inside the Suspense fallback, and the real page in a
+    # `<div hidden id="S:1">` that client script swaps in. Both carry an `<h1>`,
+    # by design — DESIGN.md §5 requires the skeleton to match the final
+    # geometry — so a naive count reports two headings on every streamed screen
+    # and the browser shows one.
+    #
+    # Hidden subtrees are what AT ignores, so they are what is stripped. Two
+    # details cost time and are worth writing down: the attribute order is
+    # `hidden id="S:1"`, not the other way round, so the match cannot assume
+    # one; and a non-greedy `.*?</div>` stops at the first closing tag inside
+    # the subtree rather than the matching one, so the close is found by
+    # counting nested opens. The count is not loosened to "at least one" —
+    # that would pass a page with a genuine duplicate.
+    def strip_hidden(page: str) -> str:
+        out = page
+        while True:
+            match = re.search(r"<div[^>]*\bhidden\b[^>]*>", out)
+            if match is None:
+                return out
+            depth, index = 1, match.end()
+            while depth and index < len(out):
+                nxt = re.search(r"<div\b|</div>", out[index:])
+                if nxt is None:
+                    index = len(out)
+                    break
+                depth += 1 if nxt.group(0) == "<div" else -1
+                index += nxt.end()
+            out = out[: match.start()] + out[index:]
+
+    def visible_h1_count(page: str) -> int:
+        return len(re.findall(r"<h1[\s>]", strip_hidden(page)))
+
+    wrong = {name: visible_h1_count(page) for name, page in pages.items()
+             if visible_h1_count(page) != 1}
+    step("each screen has exactly one top-level heading", not wrong, str(wrong) if wrong else "")
+
+    step("the primary navigation is named",
+         all('aria-label="Primary"' in page for name, page in pages.items() if name != "landing"))
+
+    section("Phase 9: no marketing pattern reached the application")
+    # BRIEF.md §4 bans a marketing hero *inside the app*, and §10's last clause
+    # is that the app looks like it was made by a design team that has never
+    # heard of a landing page. A landing page then shipped, at the owner's
+    # request, so the boundary is now something to keep rather than something
+    # that holds by absence. `Shell` is the boundary; these assert it held.
+    app_pages = {name: page for name, page in pages.items() if name != "landing"}
+
+    step("the landing page is outside the application chrome",
+         'aria-label="Primary"' not in pages["landing"],
+         "no rail on /")
+    step("and every application screen is inside it",
+         all('aria-label="Primary"' in page for page in app_pages.values()),
+         f"{len(app_pages)} screens")
+
+    # The display type sizes exist for the landing page only. tokens.test.ts
+    # fails the build if they appear outside components/landing; this is the
+    # same claim checked against what is actually served.
+    display_leaks = {
+        name: size
+        for name, page in app_pages.items()
+        for size in ("text-32", "text-44", "text-56")
+        if re.search(rf'class="[^"]*\b{size}\b', page)
+    }
+    step("no display type size is served on an application screen",
+         not display_leaks, str(display_leaks) if display_leaks else "32/44/56 confined to /")
+
+    step("no application screen carries the landing hero copy",
+         not any("Every number traces back to the model that made it" in page
+                 for page in app_pages.values()))
+
+    banned = ("bg-gradient-", "backdrop-blur", "rounded-3xl")
+    found = {name: token for name, page in app_pages.items() for token in banned if token in page}
+    step("no banned decorative device is served", not found, str(found) if found else "")
+
+    section("Phase 9: the demo bar survives on every application screen")
+    # Specification §6 requires the persistent bar wherever a fabricating
+    # provider is active. Phase 4 asserted it on two screens; Phase 9 asserts it
+    # on all of them, because that is the claim — and because the landing page
+    # having no bar is correct only if it also has no numbers.
+    step("every application screen carries the demo bar",
+         all("Demo data" in page for page in app_pages.values()),
+         f"{len(app_pages)} screens")
+    step("the landing page has no demo bar, and no scores to need one",
+         "Demo data" not in pages["landing"])
+
+    section("Phase 9: the Playwright smoke flows are present and runnable")
+    # The gate does not execute them — they need a browser binary and they are
+    # a separate command (`pnpm --filter @codonlab/web e2e`). What it asserts is
+    # that they exist and are wired, so "we have smoke flows" cannot become
+    # untrue silently.
+    e2e_dir = os.path.join(REPO_ROOT, "apps", "web", "e2e")
+    specs = sorted(f for f in os.listdir(e2e_dir)) if os.path.isdir(e2e_dir) else []
+    step("the smoke flows exist", len([f for f in specs if f.endswith(".spec.ts")]) >= 3,
+         ", ".join(specs))
+    config = os.path.join(os.path.dirname(e2e_dir), "playwright.config.ts")
+    step("and a Playwright config points at them", os.path.isfile(config))
+
+    section("Phase 9: the landing page's claims about the build are still true")
+    # The landing page publishes a gate count. It was written by hand and it
+    # went stale the moment Phase 9 added checks — it read 225 against a suite
+    # of 237, which is a false claim on the most public surface in the product.
+    #
+    # So it is checked against the suite that is running. This step counts
+    # itself, hence the +1: the number on the page is what the run will total.
+    # A hand-maintained number on a public page drifts; one the gate asserts
+    # cannot drift without going red.
+    claimed = re.search(r'<Stat value="([\d,]+)" label="automated gate checks',
+                        read_repo_file("apps", "web", "components", "landing", "landing.tsx"))
+    total = checks + 1
+    step("the published gate count matches the suite",
+         claimed is not None and int(claimed.group(1).replace(",", "")) == total,
+         f"page says {claimed.group(1) if claimed else 'nothing'}, suite runs {total}")
 
     print()
     if failures:

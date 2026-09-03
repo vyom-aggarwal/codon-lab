@@ -44,7 +44,7 @@ export function ProvenanceDrawer({
           <span className="text-12 font-mono">{variant.code}</span>
         </div>
         <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close provenance">
-          <X strokeWidth={1.5} />
+          <X aria-hidden="true" strokeWidth={1.5} />
         </Button>
       </header>
 

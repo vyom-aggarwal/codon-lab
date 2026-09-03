@@ -2,7 +2,9 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { CodonMark } from './brand/codon-mark'
+import { CommandPalette } from './command-palette'
 import { DemoBanner } from './demo-banner'
+import { ShortcutSheet } from './shortcut-sheet'
 
 /**
  * The application shell: left rail plus content.
@@ -47,6 +49,12 @@ export function AppFrame({ demoMode, children }: { demoMode: boolean; children: 
         </nav>
         <main className="min-w-0 flex-1 overflow-auto">{children}</main>
       </div>
+
+      {/* Global keyboard surfaces. Mounted here rather than per screen so
+          `⌘K` and `?` work everywhere inside the application — and nowhere on
+          the landing page, which `Shell` renders without this frame. */}
+      <CommandPalette />
+      <ShortcutSheet />
     </div>
   )
 }

@@ -230,13 +230,28 @@ export function HeroStructure({ containerClassName }: { containerClassName?: str
         // Mol*'s orientation gizmo is developer chrome. BRIEF.md §3 asks for an
         // embedded, *controlled* viewer; a landing page is not the place to
         // publish another product's debug widget.
-        try {
-          plugin.canvas3d?.setProps({
-            camera: { helper: { axes: { name: 'off', params: {} } } },
-          })
-        } catch {
-          /* Cosmetic. */
+        //
+        // Each setProps call is guarded separately. Grouping them means one
+        // rejected parameter shape silently discards the others — the whole
+        // block is inside a `catch` that exists to tolerate a moved API.
+        const setProps = (props: Parameters<NonNullable<typeof plugin.canvas3d>['setProps']>[0]) => {
+          try {
+            plugin.canvas3d?.setProps(props)
+            return true
+          } catch {
+            return false
+          }
         }
+
+        setProps({ camera: { helper: { axes: { name: 'off', params: {} } } } })
+
+        // Mol*'s defaults are tuned for a desktop structure viewer, where the
+        // scene is still most of the time: `multiSample` is temporal, which
+        // re-renders a settled frame many times, and screen-space occlusion
+        // shades it again. Both are worth their cost when a scientist is
+        // studying a structure. On a landing page they are not.
+        setProps({ multiSample: { mode: 'off' } })
+        setProps({ postprocessing: { occlusion: { name: 'off', params: {} } } })
 
         // Frame the model only after the resize has actually been applied. The
         // camera derives its distance from the viewport, so resetting in the
@@ -250,25 +265,24 @@ export function HeroStructure({ containerClassName }: { containerClassName?: str
           /* Preset framing stands. */
         }
 
-        // Honour reduced motion: ambient rotation is exactly what DESIGN.md §1.9
-        // says to switch off, and a spinning protein is a vestibular problem for
-        // some readers.
-        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        if (!still) {
-          try {
-            // `axis` is required, not optional: trackball's spin reads
-            // `params.axis[0]` directly, so omitting it throws on the first
-            // animation tick and the whole loop dies. Vec3(0, -1, 0) is the
-            // default — rotation about the camera's up vector.
-            plugin.canvas3d?.setProps({
-              trackball: {
-                animate: { name: 'spin', params: { speed: 0.08, axis: [0, -1, 0] } },
-              },
-            })
-          } catch {
-            /* A static model is fine. */
-          }
-        }
+        // **There is deliberately no ambient rotation, and that is a fix rather
+        // than a preference.** A perpetual `trackball.animate` spin redraws the
+        // scene every frame, and this scene costs ~65 ms a frame even at
+        // 358x358 with multisampling and occlusion off. That saturated the main
+        // thread badly enough to starve the Next router: clicking "Open the
+        // workbench" did nothing at all, and even assigning `window.location`
+        // could not complete. It was reproducible and it was measured — with
+        // `prefers-reduced-motion: reduce`, where the spin never started, the
+        // same click navigated and a frame cost 14 ms.
+        //
+        // A dead call-to-action is a much worse defect than a still model, so
+        // the model now sits still until the reader moves it. It is fully
+        // interactive: drag to rotate, and the triad buttons fly the camera. The
+        // motion is on demand, which is also what DESIGN.md §1.9 asks for.
+        //
+        // If ambient motion is ever wanted back, the prerequisite is making a
+        // frame cheap, not re-adding the spin: measure `requestAnimationFrame`
+        // cost first and keep it under a few milliseconds.
 
         if (!cancelled) setStatus('ready')
       } catch {
@@ -299,7 +313,6 @@ export function HeroStructure({ containerClassName }: { containerClassName?: str
         import('molstar/lib/mol-model/structure'),
       ])
       const typed = plugin as {
-        canvas3d?: { setProps: (props: unknown) => void }
         managers: {
           structure: {
             hierarchy: { current: { structures: { cell: { obj?: { data: unknown } } }[] } }
@@ -310,14 +323,6 @@ export function HeroStructure({ containerClassName }: { containerClassName?: str
       }
       const data = typed.managers.structure.hierarchy.current.structures[0]?.cell.obj?.data
       if (!data) return
-
-      // Stop the spin once someone takes control; a model that keeps turning
-      // under a residue you just asked to look at is fighting the reader.
-      try {
-        typed.canvas3d?.setProps({ trackball: { animate: { name: 'off', params: {} } } })
-      } catch {
-        /* Ignore. */
-      }
 
       const selection = Script.getStructureSelection(
         (q) =>

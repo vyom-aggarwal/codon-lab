@@ -182,6 +182,8 @@ class ImportOut(BaseModel):
 
 
 class PointOut(BaseModel):
+    #: Identity. `code` is not unique across a pooled card.
+    variant_id: uuid.UUID
     code: str
     hgvs: str
     predicted: float
@@ -219,6 +221,9 @@ class ScorecardOut(BaseModel):
     calibration: list[dict[str, float]]
     points: list[PointOut]
     targets: list[str]
+    #: Distinct target rows behind this card. Exceeds `len(targets)` when
+    #: several targets share a name.
+    target_count: int
 
 
 class ScorecardReportOut(BaseModel):

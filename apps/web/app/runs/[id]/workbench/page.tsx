@@ -47,7 +47,7 @@ export default async function WorkbenchPage({ params }: { params: Promise<{ id: 
           href={`/runs/${run.id}` as Route}
           className="text-12 text-text-muted hover:text-text inline-flex items-center gap-1"
         >
-          <ChevronLeft className="size-4" strokeWidth={1.5} />
+          <ChevronLeft aria-hidden="true" className="size-4" strokeWidth={1.5} />
           Run {run.id.slice(0, 8)}
         </Link>
       </div>

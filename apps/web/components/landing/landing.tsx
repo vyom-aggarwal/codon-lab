@@ -97,7 +97,7 @@ function Hero() {
               className="bg-text text-canvas rounded-control h-control-sm text-12 inline-flex items-center gap-1.5 px-2.5 font-medium hover:opacity-90"
             >
               Open the workbench
-              <ArrowRight className="size-4" strokeWidth={1.5} />
+              <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.5} />
             </Link>
           </nav>
         </div>
@@ -124,7 +124,7 @@ function Hero() {
                 className="bg-text text-canvas rounded-control h-control text-13 inline-flex items-center gap-1.5 px-4 font-medium hover:opacity-90"
               >
                 Open the workbench
-                <ArrowRight className="size-4" strokeWidth={1.5} />
+                <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.5} />
               </Link>
               <Link
                 href={'/#validation' as Route}
@@ -141,7 +141,7 @@ function Hero() {
         </div>
 
         <dl className="border-border mt-20 grid grid-cols-1 gap-10 border-t pt-10 sm:grid-cols-3">
-          <Stat value="225" label="automated gate checks, run against a live stack" />
+          <Stat value="238" label="automated gate checks, run against a live stack" />
           <Stat value="2,172" label="measured bench values seeded, from a published scan" />
           <Stat value="0" label="numbers fabricated outside the badged demo provider" />
         </dl>
@@ -347,7 +347,7 @@ function Refusals() {
             className="bg-text text-canvas rounded-control h-control text-13 inline-flex items-center gap-1.5 px-4 font-medium hover:opacity-90"
           >
             Open the workbench
-            <ArrowRight className="size-4" strokeWidth={1.5} />
+            <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.5} />
           </Link>
           <a
             href={REPO}
@@ -402,8 +402,8 @@ function LandingFooter() {
             </nav>
           </div>
           <p className="text-11 text-text-faint mt-10">
-            Phases 1–8 of 9 complete. The wet-lab handoff is blocked on template DNA and says so
-            where it would otherwise appear.
+            All nine build phases complete. The wet-lab handoff is blocked on template DNA and
+            says so where it would otherwise appear.
           </p>
         </div>
       </footer>

@@ -676,8 +676,14 @@ def import_measurements(
 
 @dataclass(frozen=True, slots=True)
 class PointView:
-    """One variant on the predicted-vs-measured scatter."""
+    """One variant on the predicted-vs-measured scatter.
 
+    ``variant_id`` is here because ``code`` is not unique on a pooled card:
+    two targets can both carry an ``A1N``. The renderer keys on the id, so a
+    scatter claiming 192 marks draws 192 of them.
+    """
+
+    variant_id: uuid.UUID
     code: str
     hgvs: str
     predicted: float
@@ -716,6 +722,9 @@ class ScorecardView:
     points: tuple[PointView, ...]
     measured_without_prediction: int
     targets: tuple[str, ...]
+    #: How many distinct target rows this card pools. Larger than `len(targets)`
+    #: whenever several targets share a name, which repeated runs make common.
+    target_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -870,6 +879,10 @@ def scorecards(
         points: list[PointView] = []
         direction: bool | None = None
         used_targets: set[str] = set()
+        # Counted by id, not by name. Repeated gate runs create many target rows
+        # that share a name, so a name set collapses eight targets into one and
+        # the card then claims a pooled figure rests on a single target.
+        used_target_ids: set[uuid.UUID] = set()
 
         for (variant_id, metric_name, unit_name), (mean, replicates, stated) in measured.items():
             if metric_name != measured_metric or unit_name != measured_unit:
@@ -879,10 +892,13 @@ def scorecards(
                 continue
             code, owning_target = variant_codes[variant_id]
             pairs.append(
-                scorecard_math.Paired(code=code, predicted=found[0], measured=mean)
+                scorecard_math.Paired(
+                    code=code, predicted=found[0], measured=mean, key=str(variant_id)
+                )
             )
             points.append(
                 PointView(
+                    variant_id=variant_id,
                     code=code,
                     hgvs=hgvs_of(code),
                     predicted=found[0],
@@ -893,6 +909,7 @@ def scorecards(
             if direction is None:
                 direction = stated
             used_targets.add(target_names.get(owning_target, "unknown target"))
+            used_target_ids.add(owning_target)
 
         if not pairs:
             continue
@@ -907,8 +924,9 @@ def scorecards(
                     measured_metric=measured_metric,
                     measured_unit=measured_unit,
                     n=len(pairs),
-                    points=tuple(sorted(points, key=lambda p: p.code)),
+                    points=tuple(sorted(points, key=lambda p: (p.code, str(p.variant_id)))),
                     targets=tuple(sorted(used_targets)),
+                    target_count=len(used_target_ids),
                     k=k,
                 )
             )
@@ -936,8 +954,9 @@ def scorecards(
                 card,
                 version=version,
                 spec_sign=spec.sign_convention,
-                points=tuple(sorted(points, key=lambda p: p.code)),
+                points=tuple(sorted(points, key=lambda p: (p.code, str(p.variant_id)))),
                 targets=tuple(sorted(used_targets)),
+                target_count=len(used_target_ids),
                 k=k,
             )
         )
@@ -974,6 +993,7 @@ def _unrankable_card(
     n: int,
     points: tuple[PointView, ...],
     targets: tuple[str, ...],
+    target_count: int,
     k: int,
 ) -> ScorecardView:
     """A card for measurements whose direction was never stated.
@@ -1014,6 +1034,7 @@ def _unrankable_card(
         points=points,
         measured_without_prediction=0,
         targets=targets,
+        target_count=target_count,
     )
 
 
@@ -1024,6 +1045,7 @@ def _to_view(
     spec_sign: str,
     points: tuple[PointView, ...],
     targets: tuple[str, ...],
+    target_count: int,
     k: int,
 ) -> ScorecardView:
     precision_note = ""
@@ -1062,6 +1084,7 @@ def _to_view(
         points=points,
         measured_without_prediction=card.measured_without_prediction,
         targets=targets,
+        target_count=target_count,
     )
 
 

@@ -50,7 +50,7 @@ export function NewProjectDialog() {
     >
       <DialogTrigger asChild>
         <Button variant="primary" size="sm">
-          <Plus strokeWidth={1.5} />
+          <Plus aria-hidden="true" strokeWidth={1.5} />
           New project
         </Button>
       </DialogTrigger>

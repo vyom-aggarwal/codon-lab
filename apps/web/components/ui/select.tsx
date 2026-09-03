@@ -61,7 +61,7 @@ export function Select({
       >
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon>
-          <ChevronDown className="text-text-faint size-4" strokeWidth={1.5} />
+          <ChevronDown aria-hidden="true" className="text-text-faint size-4" strokeWidth={1.5} />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
 
@@ -104,7 +104,7 @@ function SelectItem({ option }: { option: SelectOption }): ReactNode {
     >
       <span className="absolute left-2 inline-flex items-center">
         <SelectPrimitive.ItemIndicator>
-          <Check className="size-4" strokeWidth={1.5} />
+          <Check aria-hidden="true" className="size-4" strokeWidth={1.5} />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
