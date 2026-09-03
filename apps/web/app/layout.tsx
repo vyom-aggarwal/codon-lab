@@ -2,11 +2,16 @@ import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import type { ReactNode } from 'react'
 
+import { AuthProvider } from '@/components/auth-provider'
 import { QueryProvider } from '@/components/query-provider'
 import { Shell } from '@/components/shell'
 import { ToastProvider } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { fetchMeta } from '@/lib/api'
+// Imported for its side effect: installs the server-side token getter that
+// `lib/auth.ts` reads. This layout wraps every route, so it loads before any
+// page renders. See lib/auth.ts for why the server SDK cannot be imported there.
+import '@/lib/auth-server'
 
 import './globals.css'
 
@@ -45,13 +50,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <QueryProvider>
-          <TooltipProvider delayDuration={300}>
-            <ToastProvider>
-              <Shell demoMode={demoMode}>{children}</Shell>
-            </ToastProvider>
-          </TooltipProvider>
-        </QueryProvider>
+        <AuthProvider>
+          <QueryProvider>
+            <TooltipProvider delayDuration={300}>
+              <ToastProvider>
+                <Shell demoMode={demoMode}>{children}</Shell>
+              </ToastProvider>
+            </TooltipProvider>
+          </QueryProvider>
+        </AuthProvider>
       </body>
     </html>
   )

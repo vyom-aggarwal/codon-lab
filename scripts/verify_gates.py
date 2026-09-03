@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -127,6 +128,32 @@ def step(label: str, ok: bool, detail: str = "") -> None:
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def container_python(source: str) -> str:
+    """Run a snippet inside the api container and return its last line.
+
+    Some claims are only true of the *deployed* configuration — that startup
+    refuses an unsafe combination, that a row was written with the right owner —
+    and cannot be seen over HTTP from outside. Running them in the container is
+    the honest way to check them: same image, same environment, same database as
+    the API being gated.
+
+    Returns "" when the container cannot be reached, which fails the step that
+    called it rather than crashing the run.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "exec", "-T", "api", "python", "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            cwd=REPO_ROOT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
 
 
 def read_repo_file(*parts: str) -> str:
@@ -1289,6 +1316,132 @@ def main() -> int:
          ", ".join(specs))
     config = os.path.join(os.path.dirname(e2e_dir), "playwright.config.ts")
     step("and a Playwright config points at them", os.path.isfile(config))
+
+    # ======================================================================= #
+    # Deployment — the API is safe to put behind a URL
+    # ======================================================================= #
+    #
+    # These run against the *local* stack, which is unauthenticated by design,
+    # so they cannot assert token verification over HTTP — that is
+    # `tests/test_auth.py`, which mints real tokens against real key pairs, and
+    # `tests/test_ownership_isolation.py`, which puts two users in real
+    # Postgres. What is asserted here is the part that only exists once the
+    # application is actually assembled and running.
+
+    section("Deployment: an unauthenticated instance is still a working one")
+    # Ownership added a WHERE clause to the project list and a dependency to six
+    # routers. The first thing to check is that none of it broke the local case,
+    # because the local case is every gate above this line.
+    code, created = call(
+        "POST", "/projects", {"name": f"Ownership check {int(time.time())}", "organism": "E. coli"}
+    )
+    step("a project can still be created", code == 201, f"HTTP {code}")
+    new_project_id = created["id"] if isinstance(created, dict) else None
+
+    code, listed = call("GET", "/projects")
+    visible = (
+        [row["id"] for row in listed] if isinstance(listed, list) else []
+    )
+    step("and it comes back in the caller's own project list",
+         code == 200 and new_project_id in visible,
+         f"{len(visible)} project(s) visible")
+
+    section("Deployment: the caller is resolved and recorded")
+    # Every request now resolves to a User row, and a project created through the
+    # API is owned by whoever made it. Read back through the container rather
+    # than over HTTP: owner_id is deliberately not in the API's response shape,
+    # because no screen has any use for it.
+    owned = container_python(
+        "from codonlab.db import get_session\n"
+        "from codonlab.models import Project, User\n"
+        "import uuid\n"
+        "s = next(get_session())\n"
+        f"p = s.get(Project, uuid.UUID('{new_project_id}'))\n"
+        "u = s.get(User, p.owner_id) if p.owner_id else None\n"
+        "print(u.subject if u else 'UNOWNED')"
+    )
+    step("a project created through the API has an owner",
+         owned == "local-development",
+         owned or "no answer from the container")
+
+    section("Deployment: the API refuses to serve the world anonymously")
+    # The failure this prevents is the ordinary one — deploy the API, point the
+    # web app at it, never set CODONLAB_AUTH. Nothing breaks; the instance just
+    # serves every project to anyone who finds it. The guard is asserted here
+    # rather than only in a unit test because it has to fire during *startup* of
+    # the real application, with the real settings object.
+    refused = container_python(
+        "import os\n"
+        "os.environ['CODONLAB_AUTH'] = 'disabled'\n"
+        "os.environ['CORS_ORIGINS'] = 'https://codon-lab.example.app'\n"
+        "from codonlab.config import get_settings, AuthConfigurationError\n"
+        "get_settings.cache_clear()\n"
+        "try:\n"
+        "    get_settings()\n"
+        "    print('STARTED')\n"
+        "except AuthConfigurationError:\n"
+        "    print('REFUSED')"
+    )
+    step("unauthenticated plus a remote origin refuses to start",
+         refused == "REFUSED", refused or "no answer from the container")
+
+    accepted = container_python(
+        "import os\n"
+        "os.environ['CODONLAB_AUTH'] = 'jwt'\n"
+        "os.environ['CODONLAB_JWKS_URL'] = 'https://example.test/.well-known/jwks.json'\n"
+        "os.environ['CORS_ORIGINS'] = 'https://codon-lab.example.app'\n"
+        "from codonlab.config import get_settings, AuthConfigurationError\n"
+        "get_settings.cache_clear()\n"
+        "try:\n"
+        "    print('STARTED' if get_settings().auth_required else 'NOT REQUIRED')\n"
+        "except AuthConfigurationError as e:\n"
+        "    print('REFUSED')"
+    )
+    step("the same origin with authentication configured starts",
+         accepted == "STARTED", accepted or "no answer from the container")
+
+    missing_jwks = container_python(
+        "import os\n"
+        "os.environ['CODONLAB_AUTH'] = 'jwt'\n"
+        "os.environ.pop('CODONLAB_JWKS_URL', None)\n"
+        "from codonlab.config import get_settings, AuthConfigurationError\n"
+        "get_settings.cache_clear()\n"
+        "try:\n"
+        "    get_settings()\n"
+        "    print('STARTED')\n"
+        "except AuthConfigurationError:\n"
+        "    print('REFUSED')"
+    )
+    step("and jwt without a JWKS endpoint refuses rather than trusting anything",
+         missing_jwks == "REFUSED", missing_jwks or "no answer from the container")
+
+    section("Deployment: the blueprint matches the application")
+    # A deployment file that has drifted from the code is worse than none: it
+    # looks authoritative and provisions the wrong thing.
+    blueprint = read_repo_file("render.yaml")
+    step("a blueprint exists", bool(blueprint), f"{len(blueprint.splitlines())} lines")
+    step("it runs migrations before the new version serves",
+         "preDeployCommand" in blueprint and "alembic upgrade head" in blueprint)
+    step("it provisions a worker, not only a web service",
+         "type: worker" in blueprint and "codonlab.workers.worker" in blueprint)
+    step("the queue is told never to evict a job",
+         "maxmemoryPolicy: noeviction" in blueprint)
+
+    deployment_doc = read_repo_file("DEPLOYMENT.md")
+    # Asserts that the guide still admits what a deployment cannot do. The
+    # markers are the *current* gaps, and this step is expected to be edited
+    # whenever one closes — it went red the moment sign-in shipped and the
+    # sentence it was matching was deleted, which is the intended behaviour.
+    # A deployment guide that quietly stops listing its limitations is worse
+    # than one that never had a list.
+    admits = [
+        "fabricates every score",       # providers are still mock
+        "cannot be run at all",         # the 550-residue target
+        "No primers, no PDF export",    # the wet-lab handoff
+    ]
+    missing = [marker for marker in admits if marker not in deployment_doc]
+    step("the deployment guide still names what a deployment cannot do",
+         not missing, f"missing: {missing}" if missing else f"{len(admits)} limits stated")
 
     section("Phase 9: the landing page's claims about the build are still true")
     # The landing page publishes a gate count. It was written by hand and it

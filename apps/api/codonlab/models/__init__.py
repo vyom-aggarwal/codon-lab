@@ -23,6 +23,7 @@ from codonlab.models.experiment import (
     Experiment,
     Measurement,
 )
+from codonlab.models.identity import User
 from codonlab.models.project import (
     Constraint,
     Goal,
@@ -61,6 +62,7 @@ __all__ = [
     "Target",
     "TimestampedModel",
     "UUIDModel",
+    "User",
     "Variant",
     "utcnow",
 ]

@@ -3,11 +3,17 @@
 You are picking up a multi-session build. This file orients you; it is the first
 thing to read and the last thing to update.
 
-**Status current as of 2026-09-02.** All nine phases are built and committed on
-`main`. **The build is not finished**, and the difference is the point: two
-clauses of `BRIEF.md` §10 are outstanding and one of them cannot be closed from
-an agent session at all. §12 walks §10 clause by clause with the evidence for
-each verdict; read it before claiming anything about completeness.
+**Status current as of 2026-09-03.** All nine phases are built and committed on
+`main`, and the API has since been made deployable: identity, per-project
+ownership and a ceiling on queued work. **The build is still not finished**, and
+the difference is the point. §12 walks `BRIEF.md` §10 clause by clause with the
+evidence for each verdict; read it before claiming anything about completeness.
+
+**The single thing standing between this and a real deployment** is that the web
+app does not send access tokens (§9.2). The API verifies them and enforces
+ownership; the front end has no sign-in flow. With `CODONLAB_AUTH=jwt` every
+application screen returns 401. `DEPLOYMENT.md` is the operator's guide and §6
+of it is the honest list of what a deployment still cannot do.
 
 > **The product is called Codon Lab.** It was renamed from CatalystAI on
 > 2026-09-01 — the code, the packages, the environment variables, the Postgres
@@ -123,7 +129,7 @@ to know.
 ### Works end to end, verified
 
 - **Phases 1–8 complete**, each with an exit gate asserted in
-  `scripts/verify_gates.py` (**238 checks**, over HTTP, against a live stack).
+  `scripts/verify_gates.py` (**248 checks**, over HTTP, against a live stack).
   Phase 7's wet-lab handoff is the one gap — §9.1.
 - **The Phase 7 design set builder works end to end.** Select variants into a set,
   stack them combinatorially, and every stacked design carries its 8 Å pair flags
@@ -175,6 +181,49 @@ to know.
   renders with the whole stack down. Every figure on it is one this build
   measured. `DESIGN.md` §12 and §13 hold the rules; three deviations from the
   brief are named in §6.
+- **The web app signs in, and still runs with no identity provider at all.**
+  Clerk is wired: `<ClerkProvider>`, middleware, an account control in the rail,
+  and a bearer token on **every** API call in both runtimes. Clerk was chosen on
+  one criterion the owner set — least work for them: sign up, paste two keys into
+  Vercel, three into Render. Nothing in the API is Clerk-specific.
+
+  **The unconfigured path is a supported mode, not an oversight.** With no
+  publishable key the app behaves exactly as it did before authentication
+  existed, and that is what keeps the gate suite, the Playwright flows and local
+  development runnable on a machine with no provider. Every conditional —
+  provider, middleware, account control — branches on that one env var, and
+  `test/auth.test.ts` covers both sides in both runtimes.
+
+  The awkward part is worth knowing about before touching it: `lib/api.ts` is
+  imported by server *and* client components, so the token has to come from two
+  different places. The obvious `await import('@clerk/nextjs/server')` inside a
+  `typeof window` branch **does not work** — bundlers resolve `import()`
+  statically, so the `server-only` SDK lands in the client bundle and Next
+  refuses to compile. `lib/auth-server.ts` therefore registers a getter on
+  `globalThis` and the root layout imports it for that side effect; nothing a
+  client component imports ever names the server SDK.
+- **The API is deployable: identity, ownership and admission control.**
+  Authentication is delegated to an OIDC provider and verified against its JWKS
+  — **no credential is stored by this service**, which is deliberate for a
+  product holding unpublished sequence data. A `User` row is created on first
+  valid token, keyed on the `sub` claim.
+
+  Ownership hangs off a single `Project.owner_id`; every target, run, score and
+  measurement reaches its owner through `project_id`, so there is exactly one
+  place it is enforced. It is a **router-level dependency**, not a per-handler
+  argument, so a route added in a year cannot forget to opt in —
+  `tests/test_ownership.py` walks the live route table and fails if one does.
+  Somebody else's resource answers **404, never 403**: the difference confirms
+  the row exists and lets an enumerator map the database an id at a time.
+
+  Runs are rationed by a **ceiling on work in flight** (default 3) rather than a
+  rate per window, because the scarce resource is the single worker and what
+  consumes it is unfinished runs, not request frequency.
+
+  **The API refuses to start** with `CODONLAB_AUTH=disabled` once `CORS_ORIGINS`
+  names a non-local origin. That is the accident being prevented — deploy, point
+  the web app at it, never set the variable, and serve every project in the
+  database to anyone who finds the URL, with no symptom until it matters.
 - **Phase 9 ships: keyboard access, `⌘K`, the `?` sheet, an enforced contrast
   audit, three Playwright flows and regenerable screenshots.** `DESIGN.md` §9's
   two deferred devices are built and §9 now says so. The a11y pass audited the
@@ -366,7 +415,7 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 | `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
 | `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
 | `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
-| `scripts/verify_gates.py`                         | 238 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
+| `scripts/verify_gates.py`                         | 248 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
 | `apps/api/codonlab/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
 | `apps/api/codonlab/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
 | `apps/api/codonlab/domain/joining.py`             | Matching bench rows to variants          | No similarity threshold anywhere. The offset proposal is unanimous-and-unique, so there is no fraction to set wrong |
@@ -441,12 +490,22 @@ pip install -e ".[models]"       # torch + transformers, several GB
 ### Tests and gates
 
 ```powershell
-pnpm typecheck; pnpm lint; pnpm test                   # 210 vitest across 12 files
+pnpm typecheck; pnpm lint; pnpm test                   # 221 vitest across 13 files
 cd apps\api; .venv\Scripts\python -m pytest -q        # BLOCKED on this host, see below
 cd apps\api; .venv\Scripts\python -m ruff check .     # clean
 cd apps\api; .venv\Scripts\python -m mypy codonlab    # strict, clean, 69 files
-python scripts\verify_gates.py                        # 238 checks, needs the live stack
+python scripts\verify_gates.py                        # 248 checks, needs the live stack
 pnpm --filter @codonlab/web e2e                       # 6 Playwright flows, needs the stack
+```
+
+**Deploying.** `render.yaml` provisions the API, worker, Postgres and Redis;
+Vercel hosts `apps/web`. `DEPLOYMENT.md` is the operator's guide — read §6
+before showing a deployment to anybody, because it is the honest list of what
+one still cannot do. The two checks worth memorising:
+
+```bash
+curl -i https://<api>/projects   # 401 when CODONLAB_AUTH=jwt. A 200 means auth is OFF.
+curl https://<api>/health        # 200
 ```
 
 **Run pytest inside the api container.** The host suite cannot collect four
@@ -719,6 +778,33 @@ heavily styled page; if that reading was wrong, the page is one file
 
 ### Traps in the tests themselves
 
+- **`app.routes` does not contain the application's routes.** This FastAPI
+  version wraps each `include_router` in a private `_IncludedRouter` whose real
+  routes hang off `original_router`, rather than flattening them. A test that
+  iterates `app.routes` looking for `APIRoute` finds four documentation
+  endpoints and **no path parameters at all** — so every set-difference
+  assertion over them passes vacuously.
+
+  This was not hypothetical: `test_ownership.py` shipped that way for ten
+  minutes and stayed green while `target_id`'s resolver was deleted out from
+  under it. Caught by mutation, not by reading. `_api_routes()` now recurses
+  through `original_router`, and `test_the_route_walk_actually_finds_the_
+  application` asserts the walk finds more than 40 routes — a guard on the
+  guard, because an empty set difference is always true.
+- **A behavioural test can pass for an incidental reason.** The JWT
+  key-confusion attack (sign with HS256 using the provider's *public* key as the
+  shared secret) is refused even when `HS256` is in the algorithm allow-list —
+  because a real JWKS returns an RSA key object and the crypto layer will not
+  use it as an HMAC secret. That refusal depends on what key type a provider
+  happens to publish and on a PyJWT implementation detail; it is not the
+  guarantee. `auth.ALGORITHMS` is therefore asserted **directly**, and widening
+  it turns exactly one test red.
+- **Mutation testing found a real 500.** Widening the allow-list surfaced a
+  `TypeError` escaping `auth.verify` from below PyJWT's exception hierarchy —
+  which in production is a stack trace and an error-rate spike in response to a
+  forged token, instead of a 401. `verify` now catches broadly and refuses.
+
+
 - **A presence assertion is not a visibility assertion.** The first two-clicks
   test checked presence; a mutation hiding the Trace control behind a closed
   `<details>` — a genuine third click — passed it, because jsdom keeps closed
@@ -927,7 +1013,25 @@ Ranked by priority, and **the order changed at the end of Phase 9**. The top
 item is no longer a code task. Everything a machine can check about this build
 is checked; what is left at the top is the one judgement no gate can make.
 
-1. **Nobody has looked at a single screen with a design eye — and this now
+1. **Nothing has ever been signed in to.** Clerk is wired — provider, middleware,
+   token on every request in both runtimes, account control in the rail — and
+   the whole path is exercised **only** with Clerk unconfigured, which is the
+   mode that skips it. No Clerk account exists, so no real token has ever
+   reached `auth.verify` outside `tests/test_auth.py`'s synthetic key pairs.
+
+   What is genuinely unverified, and cannot be verified without an account:
+   that Clerk's session token carries the claims the API requires (`exp` and
+   `sub` are required; `iss` is checked when set); that its JWKS URL has the
+   shape `DEPLOYMENT.md` §3.3 says; and that `aud` is absent by default, which
+   is why that section says to leave `CODONLAB_JWT_AUDIENCE` unset. Those are
+   documented from Clerk's published behaviour, **not** from having seen one.
+
+   First run with real keys, check in this order: the sign-in modal opens; a
+   request carries `Authorization`; the API answers 200 rather than 401; a
+   `user` row appears. If the API answers 401, read its log — the refusal is
+   deliberately generic to the caller but the cause is logged.
+
+2. **Nobody has looked at a single screen with a design eye — and this now
    blocks the definition of done, not just a phase.** `BRIEF.md` §4 sets the bar
    ("a structural biologist opens this next to Benchling and it does not look
    like the odd one out") and §10's last clause repeats it. No test can evaluate
@@ -945,7 +1049,7 @@ is checked; what is left at the top is the one judgement no gate can make.
    <http://localhost:3000> and look; the fix for anything found is small and
    local, and the person who can see it has not seen it yet.
 
-2. **The wet-lab handoff has no template DNA to design against.** The only thing
+3. **The wet-lab handoff has no template DNA to design against.** The only thing
    standing between the build and a complete `BRIEF.md` §5, and — via the PDF
    clause — a complete §10. `BRIEF.md` §5.8 assumes site-directed mutagenesis
    primers are designable; the data model has no DNA and neither seeded target
@@ -969,7 +1073,7 @@ is checked; what is left at the top is the one judgement no gate can make.
    `ARCHITECTURE.md` §16.1 already holds the primer chemistry. Start with the
    validator: it is the valuable half and it is testable before any UI exists.
 
-3. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
+4. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
    The lipase used 93% of it; the seeded luciferase (P08659) needs ~142 min at
    the observed rate, so **it cannot be run at all today**. **Delegated back on
    2026-09-01.** The decision taken: **make the scoring stage resumable** rather
@@ -998,7 +1102,7 @@ is checked; what is left at the top is the one judgement no gate can make.
    and the next session should do this first, with the container suite green
    before and after.
 
-4. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
+5. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
    interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give, and a
    stacked design has none either. Raised three times; **delegated back on
    2026-09-01**. The decision taken: **keep refusing and state the absence** —
@@ -1014,14 +1118,14 @@ is checked; what is left at the top is the one judgement no gate can make.
    interval. That needs an owner decision on the minimum n before a band is
    shown, and it is not built.
 
-5. **"Per target class" in the scorecard is unimplemented.** `BRIEF.md` §5.9
+6. **"Per target class" in the scorecard is unimplemented.** `BRIEF.md` §5.9
    asks for a scorecard "per predictor per target class". The data model has no
    target taxonomy, so cards are per target or pooled across all targets, and a
    class would be an invented grouping. `ARCHITECTURE.md` §17.4. Needs either a
    `Target.class` the user sets, or an owner decision that pooled-across-targets
    is what was meant.
 
-6. **Stale variants exist on real targets and only the join is defended.**
+7. **Stale variants exist on real targets and only the join is defended.**
    Changing a target's canonical scheme leaves behind `Variant` rows written in
    the old one — 4,446 on one seeded target, 3,274 on another (§3). Phase 8's
    join excludes them and says so, but the rows are still there and any other
@@ -1029,12 +1133,12 @@ is checked; what is left at the top is the one judgement no gate can make.
    exposure. Options: mark them on the row, or refuse to change a canonical
    scheme once variants exist. Both are owner decisions about a real trade-off.
 
-7. **There is no UI for the cost basis.** `domain/costing` reads unit prices
+8. **There is no UI for the cost basis.** `domain/costing` reads unit prices
    from `Project.settings.cost_basis` and there is no way to set them, so the
    budget panel always shows its reason rather than a total. Deliberate that it
    refuses to invent a price; not deliberate that there is no way to supply one.
 
-8. **The seeded scorecard demonstrates the rank path and the refusal path, not
+9. **The seeded scorecard demonstrates the rank path and the refusal path, not
    the error path.** The vendored ProteinGym measurements are T50 in °C, which
    is not commensurable with any predictor's metric, so MAE and bias correctly
    read `—` on the seeded data. Exercising them with *real* measured numbers
@@ -1043,45 +1147,45 @@ is checked; what is left at the top is the one judgement no gate can make.
    ThermoMPNN's ΔΔG. The path is covered hermetically and in the gate with
    constructed values. See `apps/api/codonlab/data/proteingym/README.md`.
 
-9. **Frame rate is still unmeasured**, by design. When the owner runs it, record
+10. **Frame rate is still unmeasured**, by design. When the owner runs it, record
    it here as user-verified with a date. The case to look at is **scrolling the
    table while Mol\* is mounted and holding a WebGL context**.
 
-10. **Two real predictors have never scored the same run.** The one real
+11. **Two real predictors have never scored the same run.** The one real
     end-to-end run used a structureless target, so ThermoMPNN skipped. The
     disagreement column has never been observed with real numbers. Needs a
     target that has a structure. Phase 8 raises the stakes: with both real
     predictors on one run, the scorecard could compare them against the 2,172
     seeded measurements directly.
 
-11. **The containerised real-provider path is unverified.** Build the image with
+12. **The containerised real-provider path is unverified.** Build the image with
     `[models]` and run the opt-in gate section (`CODONLAB_GATE_REAL_MODELS=1`).
 
-12. **`ESMScorer` lets a runtime failure escape as `OSError`.** `available()`
+13. **`ESMScorer` lets a runtime failure escape as `OSError`.** `available()`
     says yes, then `score()` raises instead of `PredictorUnavailableError`. A
     predictor whose runtime is installed but unloadable should report itself
     unavailable with the reason, which is what the pipeline already handles.
     This is the cause of the one expected pytest failure (§8).
 
-13. **`Variant.region` is dead weight** — populate it deliberately or drop it.
+14. **`Variant.region` is dead weight** — populate it deliberately or drop it.
 
-14. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
+15. **The stale conservation label** at `workbench.tsx:51` says "(Phase 6)".
 
-15. **Alignment identity-scoring was never re-confirmed** by the owner
+16. **Alignment identity-scoring was never re-confirmed** by the owner
     (`ARCHITECTURE.md` §9).
 
-16. **The Claude goal parser has never run against the live API.** No
+17. **The Claude goal parser has never run against the live API.** No
     `ANTHROPIC_API_KEY` is configured, so every parse falls back to the rule
     parser and is badged as such. Do not describe it as working until it has
     been called.
 
-17. **A cold clone has never been tested.** `docker compose up` has only ever
+18. **A cold clone has never been tested.** `docker compose up` has only ever
     run on a machine that already had images and a populated database. Phase 8
     adds a new reason to care: the seed now creates a target, 4,028 variants and
     2,172 measurements on first boot, and that path has only been exercised
     against an already-migrated database.
 
-18. **One dark-theme colour pair fails AA, latently.** `--accent` on
+19. **One dark-theme colour pair fails AA, latently.** `--accent` on
     `--accent-sunk` is **4.23:1** against the 4.5:1 floor.
     `apps/web/test/contrast.test.ts` asserts the failure rather than hiding it,
     and `DESIGN.md` §1.3 records it, because the pair is **not currently
@@ -1090,7 +1194,7 @@ is checked; what is left at the top is the one judgement no gate can make.
     one does. Fix by lightening `--accent` in dark or darkening `--accent-sunk`;
     do not fix by deleting the test.
 
-19. **The a11y pass covered structure and keyboard reach, not assistive
+20. **The a11y pass covered structure and keyboard reach, not assistive
     technology.** What is asserted: accessible names on every focusable element,
     one `<h1>` per screen, no positive `tabindex`, no unlabelled input, no
     heading-level skip, full keyboard traversal of the workbench, and every
@@ -1100,7 +1204,7 @@ is checked; what is left at the top is the one judgement no gate can make.
     incoherent read aloud, and §12 records the clause as met only for the part
     that was measured.
 
-20. **The screenshots in the README are regenerable but not regenerated on
+21. **The screenshots in the README are regenerable but not regenerated on
     demand.** `pnpm --filter @codonlab/web screenshots` takes them from the live
     stack against subjects it picks out of the database, so they cannot drift
     silently on a machine that runs it — but nothing *makes* anyone run it. If a
@@ -1115,29 +1219,34 @@ The nine-phase plan is finished. There is no Phase 10, so this list is no longer
 being genuinely done, in the order it should be attacked.
 
 1. **Verify the gates before changing anything.** `docker compose up -d`, then
-   `python scripts/verify_gates.py` (**238 checks**). Then the per-package gates
-   in §5: `pnpm typecheck`, `pnpm lint`, `pnpm test` (210), `pnpm --filter
+   `python scripts/verify_gates.py` (**248 checks**). Then the per-package gates
+   in §5: `pnpm typecheck`, `pnpm lint`, `pnpm test` (221), `pnpm --filter
    @codonlab/web e2e` (6), and pytest **in the container** (399 pass, 6 skipped,
    1 known failure). If anything else is red, **stop and report**.
 
-2. **Get the owner to walk the screens** (§9.1). This is now the top item in the
-   build. It is the one clause of `BRIEF.md` §10 that no gate can reach, it is
+2. **Choose an identity provider and wire the token into the web app**
+   (§9.1). Nothing about a deployment works until this is done, in either auth
+   mode, and that is deliberate. The provider choice is the owner's — it is a
+   vendor relationship, not a tooling pick.
+
+3. **Get the owner to walk the screens** (§9.2). This remains the item no gate
+   can reach. It is the one clause of `BRIEF.md` §10 that no gate can reach, it is
    recorded in §12 as unverifiable rather than met, and every hour spent on code
    before it is an hour spent without knowing whether the thing looks right.
 
-3. **Resumable scoring** (§9.3). The first code task, because a seeded target
-   cannot be run at all without it. §9.3 now carries the exact shape of the
-   change and why it was not taken during Phase 9.
+4. **Resumable scoring** (§9.4), because a seeded target cannot be run at all
+   without it. §9.4 carries the exact shape of the change and why it was not
+   taken during Phase 9.
 
-4. **`Target.coding_sequence` plus the translation validator** (§9.2), then the
+5. **`Target.coding_sequence` plus the translation validator** (§9.3), then the
    paste field, then the primer designer against `ARCHITECTURE.md` §16.1, then
    the PDF export. This is one chain and it closes both the §5.8 gap and the
    `BRIEF.md` §10 clause that depends on it (§12, clause 6).
 
-5. **A cost-basis UI** (§9.7), so the budget panel can show a total instead of
+6. **A cost-basis UI** (§9.8), so the budget panel can show a total instead of
    its reason.
 
-6. **Then close the loop as the working agreement requires**: extend
+7. **Then close the loop as the working agreement requires**: extend
    `scripts/verify_gates.py` with a gate for whatever was built, update this file
    in the **same commit**, run every gate, fix everything red, commit with a real
    message, and stop and check in.
@@ -1310,7 +1419,7 @@ units.
 
 **Met at the moment of this commit, and mechanically re-checkable.** The README
 was written claim by claim against the code and every count in it is a number a
-gate produces: 238 gate checks, 210 vitest, 6 Playwright, 399 pytest. The
+gate produces: 248 gate checks, 221 vitest, 6 Playwright, 421 pytest. The
 screenshots are generated by `pnpm --filter @codonlab/web screenshots` from the
 live stack, against subjects the script finds in the database rather than
 hard-coded ids, so regenerating them is one command and a stale one is a diff.
@@ -1319,6 +1428,22 @@ in the README itself rather than only here. The standing risk is ordinary
 drift: nothing forces the screenshots to be re-run (§9.20).
 
 ---
+
+### A clause §10 does not have
+
+`BRIEF.md` was written for a tool that runs on one researcher's machine, so its
+definition of done says nothing about being deployed, and nothing about
+authentication. That is not an omission on the owner's part — it was out of
+scope, correctly, for all nine phases.
+
+It is worth stating plainly that **the deployment work is therefore not measured
+by §10 at all**. None of the ten clauses got closer or further away. What
+changed is that the API can now be put behind a URL without handing every
+project in the database to whoever finds it, and that a design run costs a
+caller something. Neither was a requirement; both are prerequisites for anyone
+other than the owner ever using this.
+
+The verdicts above stand unchanged.
 
 ### What this adds up to
 
@@ -1329,3 +1454,7 @@ anyone in an agent session and is waiting on the owner's eyes (clause 8).
 The honest one-line summary is: **the build does what it claims, refuses what it
 cannot support, and has never been looked at by someone who can judge whether it
 looks right.**
+
+To which the deployment work adds one more: **it is now safe to put behind a
+URL, and not yet usable behind one**, because the web app cannot sign anybody
+in (§9.1).

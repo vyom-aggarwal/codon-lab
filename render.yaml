@@ -1,0 +1,169 @@
+# Codon Lab — the half of the product that cannot run on Vercel.
+#
+# Vercel hosts `apps/web`. It cannot host the rest, and the reason is the
+# worker: a design run scores every single substitution and takes up to
+# JOB_TIMEOUT_SECONDS (3600) to do it. Serverless functions are capped in the
+# low hundreds of seconds on every tier, so the worker needs a process that
+# stays alive. Once something is running that process, the API belongs beside
+# it.
+#
+# This blueprint provisions all four pieces in one commit: the API, the worker,
+# Postgres and Redis. Render is chosen for that reason rather than on merit —
+# Railway, Fly and Koyeb all run these same two Docker images, and the app has
+# no Render-specific code in it. If you move, the only things that travel are
+# the environment variables below.
+#
+#   1. Push this file.
+#   2. Render dashboard -> New -> Blueprint -> pick this repo.
+#   3. Set the two secrets marked `sync: false` when prompted.
+#   4. Copy the API's URL into Vercel as NEXT_PUBLIC_API_URL, and back here as
+#      CORS_ORIGINS. Both are required; see DEPLOYMENT.md for why the Vercel one
+#      must be set *before* the build rather than after.
+#
+# Cost, stated plainly because the free tier cannot run this: background workers
+# are not offered on Render's free plan, and a free web service sleeps after
+# inactivity — which for an API behind a Vercel front end means the first
+# request after a quiet period times out. Two Starter instances is the real
+# floor. Postgres and Key Value have usable free tiers, though the free database
+# expires and has to be recreated.
+
+services:
+  # --------------------------------------------------------------------- api
+  - type: web
+    name: codonlab-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: starter
+    healthCheckPath: /health
+
+    # Migrations run once per deploy, not once per instance. Putting
+    # `alembic upgrade head` in the start command — which is what
+    # docker-compose.yml does, correctly, for a single local container — means
+    # every instance races every other instance to apply the same migration the
+    # moment the service scales past one.
+    preDeployCommand: alembic upgrade head && python -m codonlab.seed
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codonlab-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: codonlab-redis
+          property: connectionString
+
+      # The Vercel deployment's origin, comma-separated. Nothing else may call
+      # the API from a browser. There is no wildcard here on purpose.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # `mock` fabricates every number, and the product knows it does: a
+      # persistent amber bar on every screen, a badge on every value, watermarked
+      # exports, and a refusal to generate primers. That is the honest setting
+      # for a demo instance and it is the default.
+      #
+      # Real predictors need the `[models]` extra — torch plus the ESM-2 650M
+      # checkpoint, several gigabytes — which needs a larger plan and an image
+      # built with that extra. HANDOFF.md open thread 11 records that the
+      # containerised real-provider path has never been verified. Do not switch
+      # this to `esm2_t33_650m,thermompnn` and assume it works.
+      - key: CODONLAB_PROVIDERS
+        value: mock
+
+      # Goal parsing only. It turns free text into the objective the user
+      # confirms and never produces a scientific number. Leave it unset and the
+      # deterministic rule parser runs instead, badged as rule-based so nobody
+      # mistakes it for a reading of the sentence they wrote.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CODONLAB_PARSER_MODEL
+        value: claude-opus-5
+
+      # Seeds two demo projects and the 2,172 measured ProteinGym values the
+      # scorecard is demoable on, in the pre-deploy step above. Idempotent — it
+      # reports "already present, nothing to do" on every deploy after the
+      # first. Set to `false` for an instance a real lab will use, so their
+      # project list is their own rather than a stranger's demo.
+      - key: CODONLAB_SEED_DEMO_DATA
+        value: 'true'
+
+      # --- authentication ------------------------------------------------- #
+      # Declared here so Render's blueprint form asks for them up front. Filling
+      # them in at creation is the difference between one deploy and three.
+      #
+      # `jwt` is the only correct value for anything reachable. The API refuses
+      # to start with `disabled` once CORS_ORIGINS names a non-local origin —
+      # that pairing serves every project in the database to whoever finds the
+      # URL, and it has no symptom until it matters.
+      - key: CODONLAB_AUTH
+        value: jwt
+      # Clerk: https://<your-app>.clerk.accounts.dev/.well-known/jwks.json
+      # Required whenever CODONLAB_AUTH is jwt; the API refuses to start without
+      # it rather than trusting an unverified token.
+      - key: CODONLAB_JWKS_URL
+        sync: false
+      # Clerk: https://<your-app>.clerk.accounts.dev
+      # Optional but strongly recommended: without it, a token minted by another
+      # tenant of the same provider verifies here. It is correctly signed, so the
+      # signature check does not catch it.
+      - key: CODONLAB_JWT_ISSUER
+        sync: false
+      # Leave unset with Clerk, whose default session token carries no `aud`
+      # claim — the API only checks the audience when one is configured, so
+      # setting it here would refuse every valid token. Set it if you create a
+      # Clerk JWT template with an audience. See DEPLOYMENT.md §3.3.
+
+
+  # ------------------------------------------------------------------ worker
+  # The same image as the API with a different command. Deliberately not a
+  # second Dockerfile: a worker whose provider set had drifted from the API's
+  # would write numbers the API then describes incorrectly, and the drift would
+  # be invisible on both sides.
+  - type: worker
+    name: codonlab-worker
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: starter
+    dockerCommand: python -m codonlab.workers.worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codonlab-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: codonlab-redis
+          property: connectionString
+      - key: CODONLAB_PROVIDERS
+        value: mock
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CODONLAB_PARSER_MODEL
+        value: claude-opus-5
+
+  # ------------------------------------------------------------------- redis
+  # The job queue, not a cache: RQ keeps queued and in-flight jobs here. Evicting
+  # a key under memory pressure loses a queued run, so the policy is noeviction
+  # rather than an LRU — a run that vanishes silently is worse than an enqueue
+  # that fails loudly.
+  #
+  # `type: keyvalue` is Render's current name for this. Older blueprints call the
+  # same thing `type: redis`, and the `fromService` reference above has to use
+  # whichever name this block does. If the blueprint is rejected on this line,
+  # that rename is the reason — swap both and nothing else changes.
+  - type: keyvalue
+    name: codonlab-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: codonlab-db
+    databaseName: codonlab
+    user: codonlab
+    plan: free

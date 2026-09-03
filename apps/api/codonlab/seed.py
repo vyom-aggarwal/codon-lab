@@ -33,6 +33,7 @@ present and nothing has predicted them yet.
 from __future__ import annotations
 
 import csv
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -325,7 +326,28 @@ def measured_target_id(session: Session) -> str | None:
     return str(target.id) if target else None
 
 
+def wanted() -> bool:
+    """Whether demo data should be planted at all.
+
+    The seed creates two demo projects and imports 2,172 measured ProteinGym
+    values. On a local machine and on a demo deployment that is the point — an
+    empty scorecard demonstrates nothing, and these are real published numbers.
+
+    On an instance a lab actually uses it is somebody else's data sitting in
+    their project list. So it is a switch, defaulting to on because that is what
+    every existing caller (compose, the gates, a clean clone) expects.
+    """
+    return os.environ.get("CODONLAB_SEED_DEMO_DATA", "true").strip().lower() not in {
+        "false",
+        "0",
+        "no",
+    }
+
+
 def main() -> None:
+    if not wanted():
+        print("seed: skipped, CODONLAB_SEED_DEMO_DATA is off", file=sys.stderr)
+        return
     inserted, measurements = seed()
     parts = []
     if inserted:

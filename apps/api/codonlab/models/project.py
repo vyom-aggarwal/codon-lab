@@ -16,6 +16,19 @@ from codonlab.models.enums import ConstraintKind, NumberingKind, StructureSource
 
 class Project(TimestampedModel, table=True):
     name: str = Field(index=True)
+    #: Who this project belongs to. Everything else in the schema reaches its
+    #: owner through here — a Target has a project_id, a Run has a project_id,
+    #: and a Score reaches one through its Run — so this single column is the
+    #: whole ownership model and there is no second place to enforce it.
+    #:
+    #: Nullable, and that is load-bearing rather than laziness. Rows written
+    #: before authentication existed have no owner and cannot be assigned one
+    #: without inventing a claim about who created them. An unowned project is
+    #: visible only when the API is running unauthenticated (local development);
+    #: under CODONLAB_AUTH=jwt it belongs to nobody and is served to nobody.
+    owner_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", index=True, nullable=True
+    )
     organism: str | None = Field(default=None)
     objective: str | None = Field(
         default=None,

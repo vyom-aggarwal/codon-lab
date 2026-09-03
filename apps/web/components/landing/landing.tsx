@@ -141,7 +141,7 @@ function Hero() {
         </div>
 
         <dl className="border-border mt-20 grid grid-cols-1 gap-10 border-t pt-10 sm:grid-cols-3">
-          <Stat value="238" label="automated gate checks, run against a live stack" />
+          <Stat value="248" label="automated gate checks, run against a live stack" />
           <Stat value="2,172" label="measured bench values seeded, from a published scan" />
           <Stat value="0" label="numbers fabricated outside the badged demo provider" />
         </dl>

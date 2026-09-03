@@ -90,7 +90,7 @@ Verify the whole thing end to end over HTTP:
 python scripts/verify_gates.py
 ```
 
-**238 checks** asserting every phase exit gate against a live stack. It seeds its own
+**248 checks** asserting every phase exit gate against a live stack. It seeds its own
 projects and targets, so it is idempotent and safe to re-run. A full pass fetches from
 UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few minutes.
 
@@ -358,10 +358,10 @@ that genuinely crosses Postgres is asserted over HTTP in `verify_gates.py`, beca
 the boundary a future caller actually crosses.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test          # 210 vitest, 12 files
+pnpm typecheck && pnpm lint && pnpm test          # 221 vitest, 13 files
 cd apps/api && .venv/Scripts/python -m pytest -q  # 399 pass, 6 skipped (opt-in)
 cd apps/api && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy codonlab
-python scripts/verify_gates.py                    # 238 checks, live stack
+python scripts/verify_gates.py                    # 248 checks, live stack
 pnpm --filter @codonlab/web e2e                   # 6 Playwright flows, needs the stack
 ```
 
@@ -439,6 +439,7 @@ the point.
 
 ### Known gaps
 
+
 - **A run abandoned mid-flight stays `RUNNING` forever.** `execute()` only claims `PENDING`
   runs and RQ fails its job without writing back. Nothing reaps it, and the idempotency
   index then blocks an identical re-run. A worker heartbeat or a startup sweep is the fix.
@@ -456,6 +457,41 @@ the point.
   scheme leaves behind the `Variant` rows the old one produced; they carry scores, so
   nothing deletes them. The Phase 8 join excludes them and reports the count, but no other
   surface defends against them yet.
+
+---
+
+## Deployment
+
+Vercel hosts `apps/web`. It cannot host the rest, and the reason is the worker: a design
+run scores every substitution and can take the full `JOB_TIMEOUT_SECONDS` of 3600, while
+serverless functions are capped in the low hundreds of seconds on every tier. So the web
+app goes to Vercel and the API, worker, Postgres and Redis go to a container host —
+`render.yaml` provisions all four in one blueprint.
+
+Two things are enforced at the boundary, because an API behind a URL is a different object
+from one on `localhost`:
+
+- **Ownership.** A project belongs to a user, and everything else — targets, runs, scores,
+  measurements — reaches its owner through `project_id`. Enforced as a router-level
+  dependency rather than per handler, so a route added later cannot forget to opt in. A
+  resource somebody else owns answers `404`, not `403`: distinguishing the two confirms
+  the row exists and lets an enumerator map the database one id at a time.
+- **A ceiling on runs in flight**, not a rate limit. The scarce resource is the worker and
+  what consumes it is unfinished runs, so that is what is rationed.
+
+Identity is Clerk, verified against its JWKS — though nothing in the API is
+Clerk-specific, so moving to another OIDC provider is an environment-variable swap. Sign
+in is a hosted modal; a `user` row appears the first time somebody presents a valid token.
+**No credential is stored by this service** — no password hash, no reset token, no session table. This
+product holds unpublished sequence data, and every part of password handling that could be
+got wrong is left to a service whose business is getting it right.
+
+**The API refuses to start** with `CODONLAB_AUTH=disabled` once `CORS_ORIGINS` names a
+non-local origin. That combination serves every project in the database to anyone who
+finds the URL, and it has no symptom until it matters.
+
+Full instructions, the environment matrix, and an honest list of what a deployment still
+cannot do are in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ---
 

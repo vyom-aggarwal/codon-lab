@@ -4,18 +4,24 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlmodel import Session, col
 
+from codonlab.auth import CurrentUser
+from codonlab.config import get_settings
 from codonlab.db import get_session
-from codonlab.models import Experiment, Measurement, Project, Run, Target
+from codonlab.models import Experiment, Measurement, Project, Run, Target, User
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import projects as project_service
 from codonlab.services import targets as service
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(prefix="/projects", tags=["projects"], dependencies=[OWNERSHIP])
 
 
 class ProjectRow(BaseModel):
@@ -31,8 +37,28 @@ class ProjectRow(BaseModel):
     created_at: datetime
 
 
+def _visible_to(user: User) -> Any:
+    """The projects this caller may see.
+
+    Under `CODONLAB_AUTH=jwt` that is exactly the ones they own. Unowned
+    projects — rows written before authentication existed — belong to nobody and
+    are excluded, because assigning them to whoever happens to log in first
+    would be inventing a claim about authorship. See migration 0006_ownership.
+
+    Running unauthenticated, every project is visible: that is a single-user
+    local instance, and `config` refuses to start in that mode once CORS names a
+    non-local origin.
+    """
+    if not get_settings().auth_required:
+        return true()
+    return col(Project.owner_id) == user.id
+
+
 @router.get("", response_model=list[ProjectRow])
-def list_projects(session: Session = Depends(get_session)) -> list[ProjectRow]:
+def list_projects(
+    user: CurrentUser,
+    session: Session = Depends(get_session),
+) -> list[ProjectRow]:
     """One row per project, with the counts the table shows.
 
     Counts are computed as correlated scalar subqueries rather than joins, so a
@@ -84,6 +110,13 @@ def list_projects(session: Session = Depends(get_session)) -> list[ProjectRow]:
         measured_variant_count.label("measured_variant_count"),
         col(Project.last_activity_at),
         col(Project.created_at),
+    ).where(
+        # The list is the one endpoint the router-level ownership dependency
+        # cannot cover: there is no id in the path to check, so the filter has
+        # to be in the query. Getting this wrong would not raise — it would
+        # quietly show every project in the database to everybody, which is the
+        # exact failure this whole change exists to prevent.
+        _visible_to(user)
     ).order_by(
         # Projects with recent bench activity first; brand-new projects fall back to
         # their creation time rather than sorting to the bottom.
@@ -135,10 +168,18 @@ class ProjectDetail(BaseModel):
 
 
 @router.post("", response_model=ProjectDetail, status_code=201)
-def create_project(body: CreateProjectIn, session: Session = Depends(get_session)) -> ProjectDetail:
+def create_project(
+    body: CreateProjectIn,
+    user: CurrentUser,
+    session: Session = Depends(get_session),
+) -> ProjectDetail:
     try:
         project = service.create_project(
-            session, name=body.name, organism=body.organism, objective=body.objective
+            session,
+            name=body.name,
+            organism=body.organism,
+            objective=body.objective,
+            owner_id=user.id,
         )
     except service.ServiceError as error:
         raise HTTPException(

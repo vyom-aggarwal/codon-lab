@@ -97,7 +97,12 @@ def labels_of(scheme: NumberingScheme) -> list[str | None]:
 
 
 def create_project(
-    session: Session, *, name: str, organism: str | None, objective: str | None
+    session: Session,
+    *,
+    name: str,
+    organism: str | None,
+    objective: str | None,
+    owner_id: uuid.UUID | None = None,
 ) -> Project:
     name = name.strip()
     if not name:
@@ -107,6 +112,10 @@ def create_project(
         name=name,
         organism=(organism or "").strip() or None,
         objective=(objective or "").strip() or None,
+        #: Set from the authenticated caller. Defaults to None so the existing
+        #: callers that predate authentication — the seed, and the tests —
+        #: continue to create the unowned projects they always have.
+        owner_id=owner_id,
         last_activity_at=utcnow(),
     )
     session.add(project)

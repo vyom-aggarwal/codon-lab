@@ -25,12 +25,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
+from codonlab.auth import CurrentUser
+from codonlab.config import get_settings
 from codonlab.db import get_session
 from codonlab.models.enums import AssayKind
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import measurements as service
 from codonlab.services.targets import ServiceError
 
-router = APIRouter(tags=["measurements"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(tags=["measurements"], dependencies=[OWNERSHIP])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
@@ -428,6 +433,7 @@ def target_scorecard(
 @router.get("/scorecard", response_model=ScorecardReportOut)
 def lab_scorecard(
     session: SessionDep,
+    user: CurrentUser,
     k: Annotated[int, Query(ge=1, le=1000)] = service.DEFAULT_PRECISION_K,
 ) -> ScorecardReportOut:
     """The persistent scorecard, pooled across every target the lab has measured.
@@ -436,7 +442,8 @@ def lab_scorecard(
     the underlying pairs, not over finished cards — see
     `domain/scorecard.accumulate`, which refuses the averaging shortcut by name.
     """
-    return _report_out(service.scorecards(session, target_id=None, k=k))
+    scoped = user.id if get_settings().auth_required else None
+    return _report_out(service.scorecards(session, target_id=None, owner_id=scoped, k=k))
 
 
 def _report_out(report: service.ScorecardReport) -> ScorecardReportOut:

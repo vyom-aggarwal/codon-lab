@@ -26,6 +26,14 @@ dependencies = [
     # moves residues across the core/surface boundary invisibly. Validated
     # against published DSSP output in tests/test_sasa.py.
     "biotite>=1.0",
+    # Access-token verification. Chosen over hand-decoding because the failure
+    # mode of getting it wrong is silent: a JWT is three base64 segments and the
+    # signature is the only thing that makes the other two mean anything. PyJWT
+    # checks signature, expiry, issuer and audience in one call and is the
+    # reference implementation for Python. The [crypto] extra pulls in
+    # `cryptography`, which supplies the RSA and ECDSA verification that every
+    # OIDC provider's JWKS keys need.
+    "pyjwt[crypto]>=2.10",
 ]
 
 [project.optional-dependencies]

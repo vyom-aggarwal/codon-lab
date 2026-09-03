@@ -53,6 +53,8 @@ import {
   type Target,
 } from '@codonlab/schema'
 
+import { authHeader } from '@/lib/auth'
+
 /**
  * Structural, so the web app depends on @codonlab/schema and not on zod itself.
  * The validation library is an implementation detail of the schema package.
@@ -88,7 +90,10 @@ export class ApiError extends Error {
 async function request<T>(path: string, schema: Parser<T>): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${baseUrl()}${path}`, { cache: 'no-store' })
+    response = await fetch(`${baseUrl()}${path}`, {
+      cache: 'no-store',
+      headers: await authHeader(),
+    })
   } catch {
     throw new ApiError(
       'Cannot reach the API.',
@@ -125,7 +130,7 @@ async function send<T>(path: string, body: unknown, schema: Parser<T>): Promise<
   try {
     response = await fetch(`${baseUrl()}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
       body: JSON.stringify(body),
       cache: 'no-store',
     })
@@ -333,6 +338,7 @@ export async function deleteConstraint(constraintId: string): Promise<void> {
     response = await fetch(`${baseUrl()}/constraints/${constraintId}`, {
       method: 'DELETE',
       cache: 'no-store',
+      headers: await authHeader(),
     })
   } catch {
     throw new ApiError('Cannot reach the API.', 'Start the stack with `docker compose up`.')
@@ -396,6 +402,7 @@ export async function removeDesignMember(
     response = await fetch(`${baseUrl()}/design-sets/${designSetId}/members/${variantId}`, {
       method: 'DELETE',
       cache: 'no-store',
+      headers: await authHeader(),
     })
   } catch {
     throw new ApiError('Cannot reach the API.', 'Start the stack with `docker compose up`.')

@@ -16,11 +16,14 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from codonlab.db import get_session
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import design_sets as service
 from codonlab.services import exports as export_service
 from codonlab.services.targets import ServiceError
 
-router = APIRouter(tags=["design-sets"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(tags=["design-sets"], dependencies=[OWNERSHIP])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 

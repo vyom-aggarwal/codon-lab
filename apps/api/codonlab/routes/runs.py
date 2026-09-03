@@ -16,13 +16,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session
 
-from codonlab import queue
+from codonlab import queue, quota
+from codonlab.auth import CurrentUser
 from codonlab.db import get_session
-from codonlab.models import ModelVersion, Run, RunStage
+from codonlab.models import ModelVersion, Run, RunStage, User
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import runs as service
 from codonlab.services.targets import ServiceError
 
-router = APIRouter(tags=["runs"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(tags=["runs"], dependencies=[OWNERSHIP])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
@@ -172,9 +176,28 @@ def _run_out(session: Session, run: Run) -> RunOut:
 # --------------------------------------------------------------------------- #
 
 
+def _assert_capacity(session: Session, user: User) -> None:
+    """Refuse a new run when the caller already holds the worker.
+
+    429, because this is a "come back later" rather than a "you may not": the
+    same request succeeds once one of their runs finishes.
+    """
+    try:
+        quota.assert_capacity(session, user=user)
+    except quota.QuotaError as error:
+        raise HTTPException(
+            status_code=429,
+            detail={"message": str(error), "remedy": error.remedy},
+        ) from error
+
+
 @router.post("/goals/{goal_id}/runs", response_model=RunOut, status_code=201)
 def start_run(
-    goal_id: uuid.UUID, body: StartRunIn, session: SessionDep, response: Response
+    goal_id: uuid.UUID,
+    body: StartRunIn,
+    session: SessionDep,
+    response: Response,
+    user: CurrentUser,
 ) -> RunOut:
     """Start a design run from a confirmed objective.
 
@@ -188,6 +211,7 @@ def start_run(
     same work twice. The distinction is in the status code because that is the
     one place a caller can read it without comparing ids.
     """
+    _assert_capacity(session, user)
     try:
         run, created = service.create(
             session,
@@ -227,9 +251,14 @@ def cancel_run(run_id: uuid.UUID, session: SessionDep) -> RunOut:
 
 @router.post("/runs/{run_id}/rerun", response_model=RunOut, status_code=201)
 def rerun(
-    run_id: uuid.UUID, body: StartRunIn, session: SessionDep, response: Response
+    run_id: uuid.UUID,
+    body: StartRunIn,
+    session: SessionDep,
+    response: Response,
+    user: CurrentUser,
 ) -> RunOut:
     """Re-run with one parameter changed, linked to this run for the diff."""
+    _assert_capacity(session, user)
     try:
         run, created = service.rerun(
             session,

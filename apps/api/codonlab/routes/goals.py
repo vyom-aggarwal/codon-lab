@@ -13,12 +13,15 @@ from sqlmodel import Session
 from codonlab.db import get_session
 from codonlab.domain.goal import EXPECTATIONS, restate, spec_from_json
 from codonlab.models import Constraint, ConstraintKind, Goal
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import constraints as constraint_service
 from codonlab.services import goals as service
 from codonlab.services.targets import ServiceError
 from codonlab.sources.uniprot import SourceError
 
-router = APIRouter(tags=["goals"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(tags=["goals"], dependencies=[OWNERSHIP])
 SessionDep = Annotated[Session, Depends(get_session)]
 Handled = (ServiceError, SourceError)
 

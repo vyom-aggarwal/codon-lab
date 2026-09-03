@@ -49,6 +49,7 @@ from codonlab.models import (
     Measurement,
     ModelVersion,
     NumberingScheme,
+    Project,
     ProvenanceEvent,
     ProvenanceEventKind,
     Run,
@@ -796,10 +797,27 @@ def _spec_for(model_id: str, metric_id: str) -> MetricSpec | None:
     return None
 
 
+def owned_target_ids(session: Session, owner_id: uuid.UUID) -> list[uuid.UUID]:
+    """Every target reachable from a project this user owns.
+
+    Used to scope the lab-wide scorecard. Pooling across "the lab's projects"
+    (§5.9) has to mean *their* projects — a card that quietly pooled a stranger's
+    measurements in with yours would be wrong in the most damaging way available
+    here, because the number would look entirely reasonable.
+    """
+    statement = (
+        select(col(Target.id))
+        .join(Project, col(Target.project_id) == col(Project.id))
+        .where(col(Project.owner_id) == owner_id)
+    )
+    return list(session.exec(statement))
+
+
 def scorecards(
     session: Session,
     *,
     target_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
     k: int = DEFAULT_PRECISION_K,
 ) -> ScorecardReport:
     """One card per (model version, measured metric).
@@ -815,6 +833,12 @@ def scorecards(
     if target_id is not None:
         require_target(session, target_id)
         target_ids = [target_id]
+    elif owner_id is not None:
+        # The pooled card, scoped to this caller. An owner with no targets gets
+        # an empty list rather than None, which the pair query reads as "no
+        # targets" — not as "every target", which is what None means and is the
+        # bug this branch exists to avoid.
+        target_ids = owned_target_ids(session, owner_id)
 
     measured, unjoined, metrics = _measurement_pairs(session, target_ids)
     if not measured:

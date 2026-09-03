@@ -17,12 +17,15 @@ from sqlmodel import Session
 from codonlab.db import get_session
 from codonlab.models import NumberingScheme, Structure, Target
 from codonlab.models.enums import StructureSource
+from codonlab.ownership import OWNERSHIP
 from codonlab.services import targets as service
 from codonlab.sources.fasta import FastaError
 from codonlab.sources.pdb import StructureParseError
 from codonlab.sources.uniprot import SourceError
 
-router = APIRouter(tags=["targets"])
+# Ownership is enforced for the whole router rather than per handler: a
+# route added later cannot forget to opt in. See codonlab/ownership.py.
+router = APIRouter(tags=["targets"], dependencies=[OWNERSHIP])
 
 
 def _fail(error: Exception, status: int = 400) -> HTTPException:

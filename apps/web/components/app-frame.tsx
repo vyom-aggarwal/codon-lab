@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { AccountControl } from '@/components/account-control'
 import { CodonMark } from './brand/codon-mark'
 import { CommandPalette } from './command-palette'
 import { DemoBanner } from './demo-banner'
@@ -46,6 +47,7 @@ export function AppFrame({ demoMode, children }: { demoMode: boolean; children: 
               </Link>
             </li>
           </ul>
+          <AccountControl />
         </nav>
         <main className="min-w-0 flex-1 overflow-auto">{children}</main>
       </div>

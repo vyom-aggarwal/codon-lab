@@ -1021,3 +1021,114 @@ The one thing that is *not* written is a row whose value cell is not a finite
 number. Those are reported as problems, counted, and refused — the same rule
 `domain/hashing` applies to non-finite floats, for the same reason: they
 propagate through arithmetic and produce a scorecard that is quietly meaningless.
+
+---
+
+## 18. Identity, ownership and admission control
+
+Added when the API stopped being a thing that only runs on `localhost`. Four
+decisions, each of which had a cheaper option that was rejected for a stated
+reason.
+
+### 18.1 Identity is delegated; no credential is stored
+
+Authentication is an OIDC bearer token verified against the provider's published
+JWKS. There is no password hash, no reset token, no session table, and no
+registration step — a `User` row is created the first time a valid token is
+presented, keyed on the `sub` claim.
+
+The rejected option was implementing sign-in here. It was rejected because this
+product holds **unpublished protein sequences**, which are intellectual property
+before they are data, and because password storage, reset, verification, lockout
+and MFA are each independently sufficient to get wrong. Delegating them removes
+the whole class.
+
+`sub` is the key rather than the email address: institutional emails get
+reassigned, and a returning address must not inherit the previous holder's
+unpublished work.
+
+**No provider is chosen in code.** The API needs a JWKS URL and, optionally, an
+issuer and audience. Both optional values are checked only when set, and both
+matter: without `iss` a token from a different tenant of the same provider is
+accepted; without `aud` a token minted for a different application of yours can
+be replayed here. Both are correctly signed, so the signature check catches
+neither.
+
+### 18.2 The algorithm allow-list is the security boundary, and is asserted directly
+
+`auth.ALGORITHMS` is asymmetric-only. `none` means an unsigned token; the `HS*`
+family is symmetric, so accepting it lets a caller sign a token with the
+provider's own **public** key as the shared secret.
+
+It is asserted as a list rather than only through behaviour because the
+behavioural test passes either way: with a real JWKS the key-confusion attack
+also fails on a key-type mismatch inside the crypto layer. That protection is
+incidental — it depends on what key type a provider publishes and on a PyJWT
+implementation detail — and an incidental protection is not a guarantee.
+
+### 18.3 Ownership is a router dependency, not a service argument
+
+`ARCHITECTURE.md` §3 keeps guarantees in the service layer because the job queue
+is a second caller. Ownership is the case where that reasoning does not apply:
+the worker never *authorises* anything, it executes a run authorised when
+somebody enqueued it, and it has no caller to attribute work to. Ownership is a
+property of an HTTP request.
+
+The rejected option was threading a `user` argument through every service
+function. It was rejected because the failure that actually happens is a route
+added later without the check — and a router-level dependency runs for paths
+that do not exist yet. The cost is that entities are resolved from
+`request.path_params`, so a mapping has to stay complete;
+`tests/test_ownership.py` walks the live route table and fails when it does not.
+
+Everything reaches its owner through `Project.owner_id`. There is one column and
+one place it is enforced.
+
+**404, never 403.** A 403 on a resource that exists confirms it exists, which
+lets an enumerator map the database one id at a time.
+
+**A user, not an organisation.** Labs collaborate and a project will eventually
+belong to a group, which needs invitations, roles and a sharing UI — a feature,
+not a column. An `Organisation` slots between `User` and `Project` without
+touching anything downstream.
+
+### 18.4 Runs are rationed by work in flight, not by a rate
+
+The ceiling is on runs **pending or running** per user, defaulting to 3.
+
+A rate per window was rejected because it measures the wrong quantity. The
+scarce resource is a worker that executes one job at a time for up to an hour;
+what consumes it is unfinished runs, not request frequency. Ten enqueues in a
+second are harmless when nine are cache hits on an identical content address,
+which this product already treats as the same run. One an hour is a permanent
+backlog when each takes fifty-five minutes.
+
+The quantity rationed is the one actually being rationed, so it needs no window,
+no clock, and no invented rate. Finishing or cancelling a run frees capacity
+immediately. The default of 3 is a function of worker count, which is an
+operator's decision — hence `CODONLAB_MAX_RUNS_IN_FLIGHT` rather than a
+constant.
+
+### 18.5 Unowned rows are hidden rather than backfilled
+
+Migration `0006_ownership` adds a nullable `owner_id` and assigns nothing.
+Projects created before authentication existed have no owner and nothing records
+who made them. Backfilling them to whoever signs in first would invent a claim
+about authorship that would render identically to a true one — the same class of
+error as inventing a scientific number.
+
+Null therefore means *nobody*, and under `CODONLAB_AUTH=jwt` such a project is
+served to no one. The consequence is deliberate: deploying against an existing
+database shows an empty project list. `DEPLOYMENT.md` §3.4 says so where an
+operator will read it, and gives the one-line SQL to claim them as a deliberate
+act.
+
+### 18.6 The API refuses to start in a configuration that would expose it
+
+`CODONLAB_AUTH=disabled` with a non-local `CORS_ORIGINS` raises at startup.
+
+That combination serves every project to anyone who finds the URL and lets them
+queue an hour of compute per request, and it has **no symptom** — the instance
+works perfectly. The guard hangs off `CORS_ORIGINS` because that is the setting
+a deployment must change for the browser to reach the API at all, so the check
+fires at exactly the moment the API becomes reachable.
