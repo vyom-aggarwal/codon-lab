@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * The token header, and the mode where there is no token.
  *
- * The unconfigured branch is the one that matters most here. It is what the 248
+ * The unconfigured branch is the one that matters most here. It is what the 263
  * gate checks, the three Playwright flows and every local run exercise, so a
  * regression in it breaks the whole verification story rather than one feature.
  * It is also the branch that is easy to lose by accident: adding a `throw` for

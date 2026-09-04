@@ -107,6 +107,10 @@ class TargetOut(BaseModel):
     #: False until a canonical scheme is confirmed. Every downstream screen
     #: keys off this: no mutation code can be rendered unambiguously without it.
     is_designable: bool
+    #: Bases of the attached construct, or None. The length rather than the
+    #: sequence: no screen renders a kilobase of DNA, and sending it would put
+    #: the user's plasmid in every target payload for no reader.
+    coding_sequence_bases: int | None = None
 
 
 class CreateTargetIn(BaseModel):
@@ -184,6 +188,7 @@ def _target_out(session: Session, target: Target) -> TargetOut:
         structures=[StructureOut.of(s) for s in service.structures_for(session, target.id)],
         canonical_scheme_label=canonical.label if canonical else None,
         is_designable=canonical is not None,
+        coding_sequence_bases=len(target.coding_sequence) if target.coding_sequence else None,
     )
 
 
@@ -434,4 +439,58 @@ def sequence_track(target_id: uuid.UUID, session: SessionDep) -> SequenceTrackOu
             }
             for scheme in schemes
         ],
+    )
+
+
+class CodingSequenceIn(BaseModel):
+    sequence: str
+
+
+class CodingSequenceOut(BaseModel):
+    """The verdict on a paste, whether or not it was accepted.
+
+    A refusal is an ordinary outcome here — wrong construct, wrong frame,
+    precursor instead of mature protein — so it comes back as a 200 carrying the
+    reason rather than as an error status. The screen needs to render the
+    explanation next to the box the user is still editing.
+    """
+
+    attached: bool
+    reason: str | None = None
+    remedy: str | None = None
+    #: 1-based residue where the translation first disagrees, when it does.
+    first_difference: int | None = None
+    #: Residues of leader, when the paste encodes a precursor of this protein.
+    offset: int | None = None
+    bases: int | None = None
+    residues: int | None = None
+
+
+@router.post("/targets/{target_id}/coding-sequence", response_model=CodingSequenceOut)
+def attach_coding_sequence(
+    target_id: uuid.UUID, body: CodingSequenceIn, session: SessionDep
+) -> CodingSequenceOut:
+    """Attach the construct's DNA, if it encodes this protein.
+
+    This is what unblocks `BRIEF.md` §5.8. Primers are designed against what is
+    stored here, so the translation check in `domain/translation` is the only
+    thing standing between a paste and an oligo order that will not anneal.
+    """
+    try:
+        target, result = service.attach_coding_sequence(
+            session, target_id=target_id, pasted=body.sequence
+        )
+    except service.ServiceError as error:
+        raise HTTPException(
+            status_code=404, detail={"message": str(error), "remedy": error.remedy}
+        ) from error
+
+    return CodingSequenceOut(
+        attached=result.ok,
+        reason=result.reason,
+        remedy=result.remedy,
+        first_difference=result.first_difference,
+        offset=result.offset,
+        bases=len(target.coding_sequence) if result.ok and target.coding_sequence else None,
+        residues=len(result.protein) if result.ok and result.protein else None,
     )

@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlmodel import Session, col, select
 
+from codonlab.domain.hashing import digest_of
 from codonlab.domain.numbering import (
     ReconcileOutcome,
     Reconciliation,
@@ -26,6 +27,7 @@ from codonlab.domain.numbering import (
     align,
     reconcile,
 )
+from codonlab.domain.translation import TranslationCheck, clean, validate
 from codonlab.models import (
     NumberingScheme,
     Project,
@@ -636,3 +638,48 @@ def touch(session: Session, project_id: uuid.UUID, when: datetime | None = None)
     if project is not None:
         project.last_activity_at = when or utcnow()
         session.add(project)
+
+
+def attach_coding_sequence(
+    session: Session, *, target_id: uuid.UUID, pasted: str
+) -> tuple[Target, TranslationCheck]:
+    """Store the construct's DNA, but only if it encodes this protein.
+
+    The check is the whole value of this function. Everything downstream —
+    primer position, flanking arms, melting temperature — is computed against
+    what is stored here, and a wrong sequence does not produce a visibly wrong
+    number. It produces primers that look correct, get synthesised, and do not
+    anneal.
+
+    Refusals are returned rather than raised. A paste that does not match is an
+    ordinary thing for a user to do — wrong construct, wrong frame, precursor
+    instead of mature protein — and the screen needs the reason and the remedy
+    to show them, not an exception.
+    """
+    target = require_target(session, target_id)
+    result = validate(pasted, protein=target.sequence)
+    if not result.ok:
+        return target, result
+
+    target.coding_sequence = clean(pasted)
+    session.add(target)
+    _record(
+        session,
+        kind=ProvenanceEventKind.CODING_SEQUENCE_ATTACHED,
+        project_id=target.project_id,
+        subject_type="target",
+        subject_id=target.id,
+        payload={
+            "field": "coding_sequence",
+            "bases": len(target.coding_sequence),
+            "codons": len(target.coding_sequence) // 3,
+            "residues": len(result.protein or ""),
+            # Recorded so that a primer ordered months from now can be traced to
+            # the exact template it was designed against, without the sequence
+            # itself being duplicated into the event.
+            "digest": digest_of(target.coding_sequence),
+        },
+    )
+    session.commit()
+    session.refresh(target)
+    return target, result

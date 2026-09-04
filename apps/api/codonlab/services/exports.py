@@ -146,11 +146,16 @@ def primer_refusals(session: Session, *, design_set_id: uuid.UUID) -> tuple[Refu
 def _coding_sequence(target: Target) -> str | None:
     """The construct's DNA, if the user has attached one.
 
-    Reads through an attribute that does not exist on `Target` yet, on purpose:
-    the refusal above is the specified behaviour today, and this is the single
-    place that changes when a coding sequence becomes attachable. Written as a
-    lookup rather than a hard `return None` so that adding the column is a
-    one-line change with a test already pointing at it.
+    The column now exists (migration `0007_coding_sequence`), and whatever is in
+    it has been translated and checked to encode exactly `target.sequence` —
+    `domain/translation` refuses anything else, including a precursor that merely
+    *contains* the protein. So a non-null value here is a template a primer can
+    honestly be designed against.
+
+    The refusal above therefore now fires only for targets nobody has attached a
+    construct to, which is the normal state right after import rather than a
+    permanent block. `getattr` is kept over a direct attribute read for the
+    fixtures that construct a bare `Target` without going through the model.
     """
     return getattr(target, "coding_sequence", None)
 

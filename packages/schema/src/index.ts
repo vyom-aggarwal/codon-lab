@@ -147,9 +147,33 @@ export const targetSchema = z.object({
   canonical_scheme_label: z.string().nullable(),
   /** False until a canonical scheme is confirmed. Gates every downstream screen. */
   is_designable: z.boolean(),
+  /**
+   * Bases of the construct's coding sequence, if one has been attached.
+   *
+   * The length rather than the sequence: no screen renders a kilobase of DNA,
+   * and sending it would put the user's plasmid into every target payload for
+   * no reader. Null means no construct is attached, which is the normal state
+   * after import and the reason primers are refused.
+   */
+  coding_sequence_bases: z.number().int().nullable(),
 })
 
 export type Target = z.infer<typeof targetSchema>
+
+/** The verdict on a pasted coding sequence, accepted or refused. */
+export const codingSequenceResultSchema = z.object({
+  attached: z.boolean(),
+  reason: z.string().nullable(),
+  remedy: z.string().nullable(),
+  /** 1-based residue where the translation first disagrees with the protein. */
+  first_difference: z.number().int().nullable(),
+  /** Residues of leader, when the paste encodes a precursor of this protein. */
+  offset: z.number().int().nullable(),
+  bases: z.number().int().nullable(),
+  residues: z.number().int().nullable(),
+})
+
+export type CodingSequenceResult = z.infer<typeof codingSequenceResultSchema>
 
 export const targetSummarySchema = z.object({
   id: z.string().uuid(),

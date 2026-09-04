@@ -50,6 +50,19 @@ class Project(TimestampedModel, table=True):
 
 class Target(TimestampedModel, table=True):
     project_id: uuid.UUID = Field(foreign_key="project.id", index=True, nullable=False)
+    #: The coding sequence of the construct actually on the bench.
+    #:
+    #: Pasted by the user, never derived. A site-directed mutagenesis primer
+    #: anneals to a real template, so back-translating `sequence` through a
+    #: codon usage table would produce a plausible DNA sequence that is nobody's
+    #: plasmid — and primers against it fail to anneal, which costs a synthesis
+    #: order and a week. `ARCHITECTURE.md` §16 records the rejected alternatives.
+    #:
+    #: Null until attached, and `services/exports` refuses primers while it is,
+    #: with the reason stated. Whatever is stored here has been translated and
+    #: checked to equal `sequence` exactly (`domain/translation`), so a primer
+    #: designed against it is designed against this protein.
+    coding_sequence: str | None = Field(default=None)
     name: str
     organism: str | None = Field(default=None)
     uniprot_accession: str | None = Field(default=None, index=True)

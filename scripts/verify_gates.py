@@ -130,6 +130,46 @@ def step(label: str, ok: bool, detail: str = "") -> None:
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+KILL_SCORING_HALFWAY = [
+    'import uuid',
+    'from sqlmodel import Session, col, select',
+    'from codonlab.db import get_engine',
+    'from codonlab.models import Run, RunStage, Score',
+    'from codonlab.models.enums import RunStatus, StageStatus',
+    's = Session(get_engine())',
+    'run = s.get(Run, uuid.UUID(RUN_ID))',
+    'mine = s.exec(select(RunStage).where(',
+    '    col(RunStage.run_id) == run.id,',
+    '    col(RunStage.model_version_id).is_not(None),',
+    '    col(RunStage.status) == StageStatus.SUCCEEDED)).first()',
+    'siblings = s.exec(select(RunStage).where(',
+    '    col(RunStage.input_hash) == mine.input_hash,',
+    '    col(RunStage.model_version_id) == mine.model_version_id)).all()',
+    'kept_ids = set()',
+    'scores = s.exec(select(Score).where(',
+    '    col(Score.run_id) == run.id,',
+    '    col(Score.model_version_id) == mine.model_version_id)).all()',
+    'keep = len(scores) // 2',
+    'kept_ids = {x.id for x in scores[:keep]}',
+    'for stage in siblings:',
+    '    for score in s.exec(select(Score).where(',
+    '            col(Score.run_id) == stage.run_id,',
+    '            col(Score.model_version_id) == mine.model_version_id)).all():',
+    '        if score.id not in kept_ids:',
+    '            s.delete(score)',
+    '    stage.status = StageStatus.FAILED',
+    "    stage.error = 'simulated job timeout'",
+    '    s.add(stage)',
+    '    sibling_run = s.get(Run, stage.run_id)',
+    '    if sibling_run is not None:',
+    '        sibling_run.status = RunStatus.FAILED',
+    "        sibling_run.error = 'simulated job timeout'",
+    '        s.add(sibling_run)',
+    's.commit()',
+    "print(str(keep) + '|' + str(run.goal_id))",
+]
+
+
 def container_python(source: str) -> str:
     """Run a snippet inside the api container and return its last line.
 
@@ -1414,6 +1454,146 @@ def main() -> int:
     )
     step("and jwt without a JWKS endpoint refuses rather than trusting anything",
          missing_jwks == "REFUSED", missing_jwks or "no answer from the container")
+
+    section("The bench handoff: a construct can be attached, and is checked")
+    # BRIEF.md §5.8 has been blocked since Phase 7 on the data model having no
+    # DNA. This is the half that unblocks it. Asserted over HTTP against a real
+    # 212-residue protein rather than a fixture, because the check that matters
+    # is that a *real* coding sequence round-trips: back-translate the stored
+    # protein, paste it, and require it to be accepted.
+    #
+    # Back-translation is legitimate *here* and illegitimate in the product, and
+    # the difference is the point. A test may invent DNA that encodes a known
+    # protein because it then asserts the translator agrees. A user's primer
+    # must anneal to a plasmid nobody here has seen, so inventing one would
+    # produce oligos that fail at the bench — which is why the column is pasted
+    # and never derived (ARCHITECTURE.md §16).
+    codon = {
+        "A": "GCT", "R": "CGT", "N": "AAT", "D": "GAT", "C": "TGT", "Q": "CAA",
+        "E": "GAA", "G": "GGT", "H": "CAT", "I": "ATT", "L": "CTT", "K": "AAA",
+        "M": "ATG", "F": "TTT", "P": "CCT", "S": "TCT", "T": "ACT", "W": "TGG",
+        "Y": "TAT", "V": "GTT",
+    }
+    protein = target["sequence"]
+    cds = "".join(codon[residue] for residue in protein) + "TAA"
+
+    status, attached = call("POST", f"/targets/{target_id}/coding-sequence", {"sequence": cds})
+    step("a coding sequence that encodes the protein is accepted",
+         status == 200 and attached["attached"] is True,
+         f"{attached.get('bases')} bases, {attached.get('residues')} residues")
+    step("and its length is three bases per residue plus a stop",
+         attached.get("bases") == len(protein) * 3 + 3,
+         f"{attached.get('bases')} for {len(protein)} residues")
+
+    _, framed = call(
+        "POST", f"/targets/{target_id}/coding-sequence", {"sequence": cds[1:]}
+    )
+    step("a sequence out of frame is refused",
+         framed["attached"] is False and "codons" in (framed.get("reason") or ""),
+         (framed.get("reason") or "")[:70])
+
+    wrong = cds[:6] + ("TGG" if cds[6:9] != "TGG" else "GCT") + cds[9:]
+    _, mismatched = call(
+        "POST", f"/targets/{target_id}/coding-sequence", {"sequence": wrong}
+    )
+    step("a sequence encoding a different protein is refused",
+         mismatched["attached"] is False and mismatched.get("first_difference") == 3,
+         (mismatched.get("reason") or "")[:70])
+
+    # The signal-peptide trap. A translation that *contains* the stored protein
+    # is the failure most likely to be waved through, and every primer position
+    # would then be wrong by the length of the leader.
+    _, precursor = call(
+        "POST",
+        f"/targets/{target_id}/coding-sequence",
+        # Leader plus the *whole* coding sequence, so the translation genuinely
+        # contains the stored protein. Splicing from cds[3:] instead drops the
+        # first residue, which makes this an ordinary mismatch and tests
+        # nothing — the offset branch is only reached when the protein is
+        # present in full.
+        {"sequence": "ATGAAAGCTTTAAGT" + cds},
+    )
+    step("a precursor containing the protein is refused, not trimmed",
+         precursor["attached"] is False and precursor.get("offset") is not None,
+         f"offset {precursor.get('offset')} residues reported")
+
+    _, ambiguous = call(
+        "POST", f"/targets/{target_id}/coding-sequence", {"sequence": cds[:30] + "N" + cds[31:]}
+    )
+    step("an ambiguity code is refused rather than guessed",
+         ambiguous["attached"] is False and "N" in (ambiguous.get("reason") or ""))
+
+    section("The bench handoff: attaching a construct clears the right refusal")
+    # Two reasons refused primers. This clears exactly one of them, and the
+    # other must survive: the run's scores are still synthetic.
+    _, preflight = call("GET", f"/design-sets/{set_id}/exports")
+    reasons = " ".join(
+        entry.get("reason", "") for entry in preflight.get("refused", [])
+        if entry.get("what") == "primers"
+    )
+    step("the missing-DNA reason is gone once a construct is attached",
+         "No coding DNA sequence" not in reasons,
+         reasons[:80] or "no primer refusals left")
+    step("and primers are still refused while anything fabricated a number",
+         "primers" in json.dumps(preflight.get("refused", [])),
+         "the demo provider still blocks them, which is the other reason")
+
+    section("Resumability: a killed run leaves work behind")
+    # The claim the chunked scoring stage exists to make. Asserted end to end
+    # against real Postgres, because the failure it guards against is precisely
+    # a rollback — work that appeared to happen and did not survive.
+    #
+    # The kill is simulated rather than waited for: reproducing it honestly
+    # means a run exceeding JOB_TIMEOUT_SECONDS, which is an hour. What is
+    # simulated is exactly what a timeout leaves behind — a scoring stage that
+    # did not succeed, and only the chunks committed before the process died.
+    #
+    # A run is started *here* rather than reusing the Phase 4 one. A structure
+    # is attached to the target in between, which changes the predictor context
+    # and so the stage's input hash; scores computed before it are legitimately
+    # not reusable after it, and an earlier version of this section mistook that
+    # correct refusal for a broken recovery.
+    status, fresh = call("POST", f"/goals/{goal['id']}/runs", {})
+    fresh = await_run(fresh["id"])
+    step("a run exists under the current predictor context",
+         fresh["status"] == "succeeded", fresh.get("error") or "")
+
+    kill = chr(10).join(KILL_SCORING_HALFWAY).replace("RUN_ID", repr(str(fresh["id"])))
+    killed = container_python(kill)
+    step("and it can be staged as killed mid-scoring", "|" in killed,
+         killed or "no answer from the container")
+
+    if "|" in killed:
+        survived, resumed_goal = killed.split("|", 1)
+        status, second = call("POST", f"/goals/{resumed_goal}/runs", {})
+        step("an identical run starts after the first was killed", status == 201,
+             f"HTTP {status}")
+        second = await_run(second["id"])
+        step("and it succeeds", second["status"] == "succeeded", second.get("error") or "")
+
+        scored = [
+            entry for entry in second["stages"]
+            if entry["model"] and entry["status"] == "succeeded"
+        ]
+        logs = chr(10).join(entry.get("logs") or "" for entry in scored)
+
+        # Read from the stage log rather than a payload field: the log is what a
+        # person actually sees on the run view, and a recovery nobody can see
+        # reported is not one this gate should call verified. The stage payload
+        # is deliberately not part of the API's response shape.
+        adopted = re.search(r"Resumed from an earlier attempt: ([\d,]+) ", logs)
+        recovered = int(adopted.group(1).replace(",", "")) if adopted else 0
+        step("the surviving scores were adopted, not recomputed",
+             recovered == int(survived),
+             f"{recovered:,} recovered, {int(survived):,} had survived the kill")
+
+        total = sum(
+            int(found.replace(",", ""))
+            for found in re.findall(r"Wrote ([\d,]+) scores", logs)
+        )
+        step("and the rest were computed, so the run is complete",
+             total > int(survived),
+             f"{total:,} scores in total, having adopted {recovered:,}")
 
     section("Deployment: the blueprint matches the application")
     # A deployment file that has drifted from the code is worse than none: it

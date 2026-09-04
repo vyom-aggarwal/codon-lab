@@ -858,7 +858,19 @@ and being handed the next is how a user concludes a feature is broken.
    acid sequence and nothing else. A site-directed mutagenesis primer anneals to
    the template actually on the bench, so there is nothing here to design against.
 
-The second is a **specification gap, not an implementation gap**, and it blocks
+**The second is now cleared.** `Target.coding_sequence` exists and is pasted by
+the user, validated by translating it and requiring it to equal the stored
+protein exactly (`domain/translation`). What follows below is why it is pasted
+rather than derived, and it is still the reason — the column changed, the
+argument did not.
+
+A translation that merely *contains* the protein is refused with its offset
+rather than trimmed. That is the signal-peptide case, and it is the one most
+likely to be waved through: every primer position would shift by the length of
+the leader, and a primer at the wrong position anneals to nothing.
+
+The original framing, kept because it explains the shape of what was built:
+the gap was a **specification gap, not an implementation gap**, and it blocked
 §5.8 for both seeded targets. Back-translating the protein through a codon usage
 table would produce a plausible DNA sequence that is *not* the user's plasmid;
 primers against it would fail to anneal, which is a fabrication that costs a
@@ -1132,3 +1144,42 @@ queue an hour of compute per request, and it has **no symptom** — the instance
 works perfectly. The guard hangs off `CORS_ORIGINS` because that is the setting
 a deployment must change for the browser to reach the API at all, so the check
 fires at exactly the moment the API becomes reachable.
+
+---
+
+## 19. Scoring is chunked so that a killed run leaves work behind
+
+A design run scores every single substitution and can take longer than
+`JOB_TIMEOUT_SECONDS`. Before this, `predictor.score()` was called once over the
+whole candidate set and nothing was written until it returned — so a run killed
+at the timeout had computed hours of numbers and persisted none. A 550-residue
+target could not be run at all: every attempt threw away everything.
+
+**The commit is the mechanism, not the chunking.** Chunking does not make the
+work fit in one job; it makes the work survive. A timeout now costs at most one
+chunk, and `_recover_partial_scores` lets a later run under the same
+`input_hash` adopt what earlier attempts finished.
+
+**Chunks are whole sequence positions, not slices of the candidate list.** ESM-2
+does one masked forward pass per position and reads every substitution at that
+position from it, so splitting a position across chunks would repeat the
+expensive half of the work — chunking would cost time rather than save it.
+
+**Adoption rests on the same guarantee as `_reuse_scores`.** `input_hash` covers
+the model, its version, its weights hash, the target, the full predictor context
+and the candidate set. A score written under it could only be reproduced
+identically. The difference is that recovery deliberately does **not** require a
+succeeded stage — the runs worth recovering from are exactly the ones that
+failed — so coverage is counted per variant rather than assumed, and a partial
+set is never mistaken for a complete one.
+
+`SCORING_CHUNK_POSITIONS` is 16, from measurement rather than taste: the slowest
+real rate recorded here is ~16 s per position, so a chunk is about four minutes
+— small against an hour-long timeout, and large enough that the extra commits a
+550-residue target needs are noise. It is overridable, because the right value
+tracks how fast the configured predictor is, which is an operator's situation
+and not a scientific constant.
+
+**Still manual.** A timed-out run fails and somebody presses re-run. Automatic
+continuation needs a decision about how a partly-finished run presents itself,
+which is a design question rather than plumbing.

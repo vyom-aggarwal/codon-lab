@@ -1,4 +1,5 @@
 import {
+  codingSequenceResultSchema,
   constraintListSchema,
   constraintSchema,
   designSetListSchema,
@@ -25,6 +26,7 @@ import {
   sequenceTrackSchema,
   suggestionListSchema,
   targetSchema,
+  type CodingSequenceResult,
   type Constraint,
   type ConstraintKind,
   type DesignSet,
@@ -470,3 +472,18 @@ export function fetchLabScorecard(): Promise<ScorecardReport> {
 }
 
 export type { Scorecard }
+
+/**
+ * Attach the coding sequence of the construct on the bench.
+ *
+ * A refusal comes back as a 200 carrying its reason, not as an error: pasting
+ * the wrong construct, the wrong frame or a precursor are ordinary things to
+ * do, and the screen renders the explanation next to the box the user is still
+ * editing. Only a genuine transport or schema failure throws.
+ */
+export async function attachCodingSequence(
+  targetId: string,
+  sequence: string,
+): Promise<CodingSequenceResult> {
+  return send(`/targets/${targetId}/coding-sequence`, { sequence }, codingSequenceResultSchema)
+}

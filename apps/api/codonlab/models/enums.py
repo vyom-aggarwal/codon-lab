@@ -107,6 +107,11 @@ class ProvenanceEventKind(StrEnum):
     DESIGN_SET_CREATED = "design_set_created"
     EXPORT_GENERATED = "export_generated"
     MEASUREMENTS_IMPORTED = "measurements_imported"
+    #: A coding sequence was attached to a target, having been translated and
+    #: checked to encode exactly the protein already stored. Recorded because a
+    #: primer ordered months later has to be traceable to the template it was
+    #: designed against.
+    CODING_SEQUENCE_ATTACHED = "coding_sequence_attached"
 
 
 class AssayKind(StrEnum):

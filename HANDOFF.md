@@ -129,7 +129,7 @@ to know.
 ### Works end to end, verified
 
 - **Phases 1–8 complete**, each with an exit gate asserted in
-  `scripts/verify_gates.py` (**248 checks**, over HTTP, against a live stack).
+  `scripts/verify_gates.py` (**263 checks**, over HTTP, against a live stack).
   Phase 7's wet-lab handoff is the one gap — §9.1.
 - **The Phase 7 design set builder works end to end.** Select variants into a set,
   stack them combinatorially, and every stacked design carries its 8 Å pair flags
@@ -202,6 +202,39 @@ to know.
   refuses to compile. `lib/auth-server.ts` therefore registers a getter on
   `globalThis` and the root layout imports it for that side effect; nothing a
   client component imports ever names the server SDK.
+- **A target can carry the DNA of the construct on the bench, and the wet-lab
+  blocker is half cleared.** `Target.coding_sequence` exists (migration
+  `0007_coding_sequence`), pasted by the user and never derived. It is stored
+  only if `domain/translation` translates it and finds it encodes **exactly**
+  the protein already held.
+
+  The refusals are the value, and each names a way a real paste goes wrong: out
+  of frame, an internal stop, an ambiguity code, a truncation, the wrong
+  construct — reported with the residue number where it first disagrees. The one
+  worth knowing about is the **precursor**: a translation that merely *contains*
+  the stored protein is refused with its offset rather than trimmed, because
+  trimming would shift every primer position by the length of the signal peptide
+  and a primer at the wrong position anneals to nothing. Mutation testing
+  confirmed a containment check passes every other test in the file.
+
+  `services/exports._coding_sequence` was written years-of-commits ago against
+  an attribute that did not exist, "the single place that changes when a coding
+  sequence becomes attachable". It needed no change: attaching one removes the
+  missing-DNA refusal automatically, and the fabrication refusal survives, which
+  the gate now asserts as a transition rather than a state.
+
+  **Primers and the PDF are still not built.** The blocker is gone and the
+  chemistry is already decided (`ARCHITECTURE.md` §16.1); what remains is the
+  designer itself.
+- **Scoring is chunked and resumable, so a large target can finish.**
+  `predictor.score()` used to be called once over the whole candidate set with
+  nothing written until it returned, so a run killed at the hour-long timeout
+  had computed hours of numbers and persisted none — which is why the seeded
+  550-residue luciferase could not be run at all. Scoring now runs in chunks of
+  whole sequence positions, each committed, and `_recover_partial_scores` lets a
+  later run under the same input hash adopt what an earlier attempt finished.
+  Verified in the gate by killing a run with half its scores written and
+  re-running it.
 - **The API is deployable: identity, ownership and admission control.**
   Authentication is delegated to an OIDC provider and verified against its JWKS
   — **no credential is stored by this service**, which is deliberate for a
@@ -415,7 +448,7 @@ Goal text → parsers/ (Claude or rule fallback) → Goal (unconfirmed)
 | `apps/web/components/workbench/variant-table.tsx` | Virtualised table                        | `ROW_HEIGHT = 30` duplicated into JS out of necessity; `workbench.test.ts` guards the duplication    |
 | `apps/web/lib/rationale.ts`                       | "Why this was proposed"                  | A **pure function** of the row. Never a language model. Each clause names the field it rests on      |
 | `apps/web/test/tokens.test.ts`                    | Design-system enforcement                | Fails the build on any off-system colour, size, radius, shadow, gradient, emoji                      |
-| `scripts/verify_gates.py`                         | 248 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
+| `scripts/verify_gates.py`                         | 263 checks over HTTP                     | The real gate. Self-seeding and idempotent. **Add a section per phase you complete**                 |
 | `apps/api/codonlab/domain/epistasis.py`           | Stacking, the 8 A pair flag, additivity  | `Proximity` is three-valued so "not measured" cannot render as "far apart". Totals carry their assumption |
 | `apps/api/codonlab/services/exports.py`           | The primer refusal                       | Built before the exporter it constrains. The only entry point, so nothing routes around it           |
 | `apps/api/codonlab/domain/joining.py`             | Matching bench rows to variants          | No similarity threshold anywhere. The offset proposal is unanimous-and-unique, so there is no fraction to set wrong |
@@ -494,7 +527,7 @@ pnpm typecheck; pnpm lint; pnpm test                   # 221 vitest across 13 fi
 cd apps\api; .venv\Scripts\python -m pytest -q        # BLOCKED on this host, see below
 cd apps\api; .venv\Scripts\python -m ruff check .     # clean
 cd apps\api; .venv\Scripts\python -m mypy codonlab    # strict, clean, 69 files
-python scripts\verify_gates.py                        # 248 checks, needs the live stack
+python scripts\verify_gates.py                        # 263 checks, needs the live stack
 pnpm --filter @codonlab/web e2e                       # 6 Playwright flows, needs the stack
 ```
 
@@ -776,6 +809,26 @@ heavily styled page; if that reading was wrong, the page is one file
   variant carried maximal disagreement. Fixed with a shared latent read in each
   metric's own direction (`providers/mock.py`, `_SHARED_WEIGHT`).
 
+### The escaping trap, stated as a rule because it keeps recurring
+
+Writing Python **through a shell heredoc** to patch a file has now silently
+corrupted a file four times in this project: twice in `HANDOFF.md`, twice in
+`scripts/verify_gates.py`. Two distinct failures, both silent:
+
+- `` in a path like `appspi` inside a non-raw Python string becomes a **BEL
+  character**. The replacement then never matches and the edit is skipped with
+  no error.
+- `"\n"` inside a heredoc inside a patch script resolves one level too far and
+  becomes a **real newline** inside a string literal, producing a syntax error
+  in the file being written — which is only noticed if something parses it.
+
+**The rule: build patch scripts with the Write tool, not a heredoc.** A file
+written directly has exactly one level of escaping, and raw strings behave.
+Where a heredoc is unavoidable, use `r"..."` for anything containing a
+backslash, and `chr(10)` rather than an escape for a newline. Always `ast.parse`
+the result before trusting it — every one of these four was caught by parsing,
+and none by reading.
+
 ### Traps in the tests themselves
 
 - **`app.routes` does not contain the application's routes.** This FastAPI
@@ -1049,58 +1102,40 @@ is checked; what is left at the top is the one judgement no gate can make.
    <http://localhost:3000> and look; the fix for anything found is small and
    local, and the person who can see it has not seen it yet.
 
-3. **The wet-lab handoff has no template DNA to design against.** The only thing
-   standing between the build and a complete `BRIEF.md` §5, and — via the PDF
-   clause — a complete §10. `BRIEF.md` §5.8 assumes site-directed mutagenesis
-   primers are designable; the data model has no DNA and neither seeded target
-   has any. A primer anneals to the construct actually on the bench, so this
-   cannot be worked around by back-translating the protein — that would produce
-   a plausible sequence that is not the user's plasmid.
+3. **The wet-lab handoff needs a primer designer and a PDF; the DNA blocker is
+   gone.** `Target.coding_sequence` exists and is validated by translation, so
+   `services/exports` no longer refuses primers for want of a template — only
+   for the run's numbers being synthetic, which is a different and correct
+   refusal.
 
-   **The owner delegated this on 2026-09-01.** The decision taken, recorded here
-   rather than in `ARCHITECTURE.md` because nothing is built yet: **the coding
-   sequence is pasted by the user**, stored on a new `Target.coding_sequence`,
-   and validated by translating it and asserting it matches the protein already
-   stored. It is the only source that is genuinely the construct on the bench,
-   which is the whole point of the screen. ENA/EMBL cross-reference was rejected
-   because it returns the *reference* CDS — usually codon-optimised differently
-   and often tagged — and primers designed against it may not anneal to the
-   user's plasmid; if it is ever added it must be badged reference-derived and
-   not trusted for ordering.
+   What is left is the designer itself and the one-page PDF. Every scientific
+   decision is already made and written down in `ARCHITECTURE.md` §16.1 —
+   nearest-neighbour Tm (SantaLucia & Hicks 2004) via **Biopython's**
+   `Bio.SeqUtils.MeltingTemp` rather than hand-rolled, Owczarzy salt correction,
+   Liu & Naismith 2008 partially-overlapping layout, reaction conditions as a
+   project setting. None of it is implemented. Biopython is not yet a
+   dependency.
 
-   **Nothing is implemented.** The column, the translation validator, the paste
-   UI, the primer designer and the PDF export are all still to build.
-   `ARCHITECTURE.md` §16.1 already holds the primer chemistry. Start with the
-   validator: it is the valuable half and it is testable before any UI exists.
+   Two things to keep when building it. The refusal must stay reachable: a set
+   whose run used a fabricating provider is still refused primers, and that is
+   asserted. And the asymmetry in §16 still holds — a **gene fragment** may
+   legitimately be back-translated because it is ordered de novo; a **primer**
+   may not, because it must anneal to something that already exists.
 
-4. **`JOB_TIMEOUT_SECONDS` is 3600 and a 550-residue target would be killed.**
-   The lipase used 93% of it; the seeded luciferase (P08659) needs ~142 min at
-   the observed rate, so **it cannot be run at all today**. **Delegated back on
-   2026-09-01.** The decision taken: **make the scoring stage resumable** rather
-   than raising the cap, which is what `ARCHITECTURE.md` §14.1 already names as
-   the better fix.
+4. **A large target now finishes across several runs, not one.**
+   `JOB_TIMEOUT_SECONDS` is 3600 and the seeded luciferase (P08659) needs ~142
+   minutes, so it still cannot complete in a single job. What changed is that it
+   no longer has to: scoring is chunked by sequence position and **committed per
+   chunk**, and `_recover_partial_scores` lets an identical later run adopt
+   everything an earlier attempt finished. Verified end to end in the gate — a
+   run killed with half its scores written was resumed by the next one, which
+   recomputed only the missing half.
 
-   **Not implemented, and Phase 9 deliberately did not implement it.** The cost
-   is now understood precisely, which is the useful thing this phase added:
-
-   - `_stage_score` calls `predictor.score(state.candidates, state.ctx)` **once
-     over the whole candidate set** and only then calls `_write_scores`. A killed
-     run has therefore written nothing, which is why there is nothing to resume
-     from — the timeout is a symptom, the single-shot call is the cause.
-   - `_reuse_scores(session, run=..., version=..., input_hash=...)` already
-     exists and already reuses scores across runs on a matching input hash. It
-     is the resume mechanism; it just never has partial work to find.
-   - So the change is: chunk `state.candidates`, write and commit each chunk, and
-     let `_reuse_scores` skip what is already stored. The ESM provider already
-     iterates positions internally, so chunking by position is natural.
-
-   It was left out because `services/runs.py` is the file every run flows
-   through and the only place a `Score` is created (§4), the host test suite
-   cannot run against it on this machine (§5), and restructuring it in the last
-   hours of the last phase trades a known-good pipeline for an unverified one.
-   That is a judgement, not a rule — **the constant has still not been edited**,
-   and the next session should do this first, with the container suite green
-   before and after.
+   Two things are deliberately still open. The cap has **not** been raised.
+   And continuation is **manual**: a timed-out run fails, and somebody has to
+   press re-run. Automatic re-enqueue is the obvious next step and is not built;
+   it needs a decision about how a run reports "partly done" in the interface,
+   which is a design question rather than a plumbing one.
 
 5. **The ΔΔG interval conflict with the brief.** `BRIEF.md` §7 requires an
    interval on a ΔΔG; ThermoMPNN has no per-variant uncertainty to give, and a
@@ -1219,7 +1254,7 @@ The nine-phase plan is finished. There is no Phase 10, so this list is no longer
 being genuinely done, in the order it should be attacked.
 
 1. **Verify the gates before changing anything.** `docker compose up -d`, then
-   `python scripts/verify_gates.py` (**248 checks**). Then the per-package gates
+   `python scripts/verify_gates.py` (**263 checks**). Then the per-package gates
    in §5: `pnpm typecheck`, `pnpm lint`, `pnpm test` (221), `pnpm --filter
    @codonlab/web e2e` (6), and pytest **in the container** (399 pass, 6 skipped,
    1 known failure). If anything else is red, **stop and report**.
@@ -1419,7 +1454,7 @@ units.
 
 **Met at the moment of this commit, and mechanically re-checkable.** The README
 was written claim by claim against the code and every count in it is a number a
-gate produces: 248 gate checks, 221 vitest, 6 Playwright, 421 pytest. The
+gate produces: 263 gate checks, 221 vitest, 6 Playwright, 421 pytest. The
 screenshots are generated by `pnpm --filter @codonlab/web screenshots` from the
 live stack, against subjects the script finds in the database rather than
 hard-coded ids, so regenerating them is one command and a stale one is a diff.

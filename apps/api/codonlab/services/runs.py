@@ -23,12 +23,14 @@ score with each predictor, aggregate, filter by constraints, rank.
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from sqlalchemy import and_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
@@ -958,8 +960,17 @@ def _stage_score(session: Session, run: Run, step: PlannedStage, state: _State) 
             payload={"model": predictor.id, "cached": True, "scores": count},
         )
 
-    values = predictor.score(state.candidates, state.ctx)
-    written = _write_scores(session, run=run, version=version, values=values, state=state)
+    recovered, remaining = _recover_partial_scores(
+        session, run=run, version=version, input_hash=input_hash, state=state
+    )
+    written = recovered + _score_in_chunks(
+        session,
+        run=run,
+        version=version,
+        predictor=predictor,
+        candidates=remaining,
+        state=state,
+    )
 
     _record(
         session,
@@ -983,17 +994,191 @@ def _stage_score(session: Session, run: Run, step: PlannedStage, state: _State) 
         if predictor.is_mock
         else ""
     )
+    resumed = (
+        f"\nResumed from an earlier attempt: {recovered:,} of these scores were "
+        f"already computed under the same input hash and were not recomputed."
+        if recovered
+        else ""
+    )
     return _Outcome(
         status=StageStatus.SUCCEEDED,
         logs=(
             f"{_enumeration_note(state)}\n"
             f"{predictor.name} {predictor.version}, weights {short(predictor.weights_hash)}.\n"
             f"Wrote {written:,} scores for "
-            f"{', '.join(metric.id for metric in predictor.metrics)}.{synthetic}"
+            f"{', '.join(metric.id for metric in predictor.metrics)}.{synthetic}{resumed}"
         ),
         input_hash=input_hash,
-        payload={"model": predictor.id, "cached": False, "scores": written},
+        payload={
+            "model": predictor.id,
+            "cached": False,
+            "scores": written,
+            "resumed": recovered,
+        },
     )
+
+
+#: How many sequence positions one scoring chunk covers.
+#:
+#: Chunking exists so that a run killed part-way through leaves usable work
+#: behind. The size is a trade: smaller chunks lose less to a kill and cost more
+#: commits; larger ones the reverse.
+#:
+#: The number is taken from the slowest rate this project has measured rather
+#: than chosen. A real run on the 212-residue lipase scored 4,028 candidates in
+#: 93% of the hour-long job timeout — about 0.83 s per candidate, and with 19
+#: substitutions per position, about 16 s per position. Sixteen positions is
+#: therefore roughly four minutes of work: small enough that losing one to a
+#: kill is not painful, and large enough that the 34 extra commits a 550-residue
+#: target needs are noise beside it.
+#:
+#: Overridable because the right value tracks how fast the configured predictor
+#: actually is, which is an operator's situation and not a scientific constant.
+SCORING_CHUNK_POSITIONS = int(os.environ.get("CODONLAB_SCORING_CHUNK_POSITIONS", "16"))
+
+
+def _positions_in_chunks(
+    candidates: Sequence[VariantInput], positions_per_chunk: int
+) -> Iterable[Sequence[VariantInput]]:
+    """Group candidates into chunks of whole sequence positions.
+
+    Whole positions, not a flat slice of the candidate list. Predictors that
+    score by masked position — ESM-2 is the one here — do one forward pass per
+    position and read every substitution at it from that pass. Splitting a
+    position across two chunks would repeat the expensive half of the work, so
+    the chunk boundary follows the unit the model actually computes in.
+    """
+    by_position: dict[int, list[VariantInput]] = {}
+    for candidate in candidates:
+        by_position.setdefault(candidate.sequence_position, []).append(candidate)
+
+    ordered = sorted(by_position)
+    for start in range(0, len(ordered), positions_per_chunk):
+        chunk: list[VariantInput] = []
+        for position in ordered[start : start + positions_per_chunk]:
+            chunk.extend(by_position[position])
+        if chunk:
+            yield chunk
+
+
+def _score_in_chunks(
+    session: Session,
+    *,
+    run: Run,
+    version: ModelVersion,
+    predictor: Predictor,
+    candidates: Sequence[VariantInput],
+    state: _State,
+) -> int:
+    """Score in chunks, committing each one before starting the next.
+
+    **The commit is the whole point.** Before this, `predictor.score()` was
+    called once over the entire candidate set and nothing was written until it
+    returned — so a run killed at the job timeout had computed hours of numbers
+    and persisted none of them, and there was nothing for a later run to pick
+    up. That is why a 550-residue target could not be run at all: it needs about
+    142 minutes and the timeout is 60, so every attempt threw away everything.
+
+    Committing per chunk does not make the work fit in one job. It makes the
+    work *survive*, so a second run continues rather than restarting. The
+    remaining cost of a timeout is at most one chunk.
+
+    `_write_scores` inserts with `ON CONFLICT DO NOTHING`, so a chunk written
+    twice — a worker killed between the insert and the commit — is not a second
+    set of numbers for the same cell.
+    """
+    if not candidates:
+        return 0
+
+    written = 0
+    for chunk in _positions_in_chunks(candidates, SCORING_CHUNK_POSITIONS):
+        values = predictor.score(chunk, state.ctx)
+        written += _write_scores(
+            session, run=run, version=version, values=values, state=state
+        )
+        # Committing mid-stage is deliberate. The stage row stays RUNNING and
+        # the provenance event is written at the end, so the *claim* about this
+        # stage is still made once; what is committed early is only the numbers,
+        # each already carrying its model version and run.
+        session.commit()
+    return written
+
+
+def _recover_partial_scores(
+    session: Session,
+    *,
+    run: Run,
+    version: ModelVersion,
+    input_hash: str,
+    state: _State,
+) -> tuple[int, list[VariantInput]]:
+    """Adopt scores an earlier attempt already computed, and say what is left.
+
+    `_reuse_scores` above handles the complete case: a stage that **succeeded**
+    with this exact input hash, whose scores are copied wholesale. This handles
+    the incomplete one — a run that was killed at the timeout having scored some
+    of the positions.
+
+    Both rest on the same guarantee. `input_hash` covers the model, its version,
+    its weights hash, the target, the full predictor context and the candidate
+    set, so a score written under it could only be reproduced identically by
+    computing it again. Adopting it is not a shortcut; recomputing it would be
+    waste.
+
+    Deliberately **not** restricted to succeeded stages, which is the difference
+    from `_reuse_scores`: the runs worth recovering from are exactly the ones
+    that failed. Coverage is therefore counted per variant rather than assumed —
+    a partial set must not be mistaken for a complete one.
+    """
+    prior = session.exec(
+        select(Score)
+        .join(
+            RunStage,
+            and_(
+                col(RunStage.run_id) == col(Score.run_id),
+                col(RunStage.model_version_id) == col(Score.model_version_id),
+            ),
+        )
+        .where(
+            col(RunStage.input_hash) == input_hash,
+            col(RunStage.model_version_id) == version.id,
+            col(Score.run_id) != run.id,
+        )
+    ).all()
+
+    if not prior:
+        return 0, list(state.candidates)
+
+    # One row per (variant, metric) from possibly several earlier attempts;
+    # `uq_score` then discards the duplicates on insert.
+    rows = [
+        {
+            "id": uuid.uuid4(),
+            "created_at": utcnow(),
+            "variant_id": score.variant_id,
+            "model_version_id": version.id,
+            "run_id": run.id,
+            "metric": score.metric,
+            "value": score.value,
+            "uncertainty": score.uncertainty,
+            "ci_low": score.ci_low,
+            "ci_high": score.ci_high,
+        }
+        for score in prior
+    ]
+    for chunk in _chunked(rows, 1000):
+        session.execute(
+            pg_insert(Score).values(chunk).on_conflict_do_nothing(constraint="uq_score")
+        )
+    session.commit()
+
+    covered = {score.variant_id for score in prior}
+    remaining = [
+        candidate
+        for candidate in state.candidates
+        if state.variant_ids.get(candidate.code) not in covered
+    ]
+    return len(rows), remaining
 
 
 def _reuse_scores(

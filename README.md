@@ -90,7 +90,7 @@ Verify the whole thing end to end over HTTP:
 python scripts/verify_gates.py
 ```
 
-**248 checks** asserting every phase exit gate against a live stack. It seeds its own
+**263 checks** asserting every phase exit gate against a live stack. It seeds its own
 projects and targets, so it is idempotent and safe to re-run. A full pass fetches from
 UniProt, RCSB and AlphaFold DB and executes real design runs, so it takes a few minutes.
 
@@ -361,7 +361,7 @@ the boundary a future caller actually crosses.
 pnpm typecheck && pnpm lint && pnpm test          # 221 vitest, 13 files
 cd apps/api && .venv/Scripts/python -m pytest -q  # 399 pass, 6 skipped (opt-in)
 cd apps/api && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy codonlab
-python scripts/verify_gates.py                    # 248 checks, live stack
+python scripts/verify_gates.py                    # 263 checks, live stack
 pnpm --filter @codonlab/web e2e                   # 6 Playwright flows, needs the stack
 ```
 
@@ -439,14 +439,23 @@ the point.
 
 ### Known gaps
 
+- **Primers and the one-page PDF are still not built**, which is the last clause of
+  `BRIEF.md` §10 that is not met. The blocker is gone — a target can now carry the coding
+  sequence of the construct on the bench, checked by translation — and the primer
+  chemistry is already decided and written down (`ARCHITECTURE.md` §16.1). What remains
+  is the designer and the PDF themselves.
+
 
 - **A run abandoned mid-flight stays `RUNNING` forever.** `execute()` only claims `PENDING`
   runs and RQ fails its job without writing back. Nothing reaps it, and the idempotency
   index then blocks an identical re-run. A worker heartbeat or a startup sweep is the fix.
-- **`JOB_TIMEOUT_SECONDS = 3600` is marginal.** A real run on the 212-residue lipase used
-  93% of it. At the observed rate a 550-residue target needs ~142 minutes and would be
-  killed. The decision taken is to make the scoring stage resumable rather than raise the
-  cap; it is **not built**, and the constant has deliberately not been edited meanwhile.
+- **`JOB_TIMEOUT_SECONDS = 3600` is still marginal, but no longer fatal.** A real run on
+  the 212-residue lipase used 93% of it, and at that rate a 550-residue target needs ~142
+  minutes. Scoring is now **chunked by sequence position and committed per chunk**, so a
+  run killed at the timeout leaves its completed positions behind and an identical re-run
+  adopts them instead of recomputing. A large target therefore finishes across two or
+  three runs rather than never. The cap has deliberately still not been raised. What is
+  *not* built is automatic continuation — the re-run is a button somebody presses.
 - **ΔΔG intervals.** `BRIEF.md` §7 requires an interval and ThermoMPNN has no per-variant
   uncertainty to give. It reports the point estimate with the reason stated, rather than
   dressing a benchmark RMSE as a per-variant interval. This leaves the brief's requirement

@@ -8,6 +8,7 @@ import { SequenceTrack, type TrackScheme } from '@/components/sequence-track'
 import { Badge } from '@/components/ui/badge'
 import { ApiError, fetchRuns, fetchTarget, fetchTrack } from '@/lib/api'
 
+import { CodingSequencePanel } from './coding-sequence-panel'
 import { NumberingPanel } from './numbering-panel'
 
 export const dynamic = 'force-dynamic'
@@ -121,6 +122,13 @@ export default async function TargetPage({ params }: { params: Promise<{ id: str
           structures={target.structures}
           hasAccession={Boolean(target.uniprot_accession)}
           isDesignable={target.is_designable}
+        />
+      </section>
+
+      <section className="border-border border-t p-6">
+        <CodingSequencePanel
+          targetId={target.id}
+          attached={target.coding_sequence_bases}
         />
       </section>
 
