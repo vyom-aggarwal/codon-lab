@@ -56,6 +56,7 @@ import {
 } from '@codonlab/schema'
 
 import { authHeader } from '@/lib/auth'
+import { serverErrorRemedy, unreachableRemedy, versionSkewRemedy } from '@/lib/remedies'
 
 /**
  * Structural, so the web app depends on @codonlab/schema and not on zod itself.
@@ -99,14 +100,14 @@ async function request<T>(path: string, schema: Parser<T>): Promise<T> {
   } catch {
     throw new ApiError(
       'Cannot reach the API.',
-      'Start the stack with `docker compose up`, then reload.',
+      unreachableRemedy('reload'),
     )
   }
 
   if (!response.ok) {
     throw new ApiError(
       `The API returned ${response.status} for ${path}.`,
-      'Check the api service logs with `docker compose logs api`.',
+      serverErrorRemedy(),
     )
   }
 
@@ -116,7 +117,7 @@ async function request<T>(path: string, schema: Parser<T>): Promise<T> {
     // scientist. Fail loudly instead.
     throw new ApiError(
       `The API response for ${path} did not match the expected schema.`,
-      'The web and api versions are out of step — rebuild with `docker compose up --build`.',
+      versionSkewRemedy(),
     )
   }
   return parsed.data
@@ -139,7 +140,7 @@ async function send<T>(path: string, body: unknown, schema: Parser<T>): Promise<
   } catch {
     throw new ApiError(
       'Cannot reach the API.',
-      'Start the stack with `docker compose up`, then retry.',
+      unreachableRemedy('retry'),
     )
   }
 
@@ -162,7 +163,7 @@ async function send<T>(path: string, body: unknown, schema: Parser<T>): Promise<
   if (!parsed.success) {
     throw new ApiError(
       `The API response for ${path} did not match the expected schema.`,
-      'The web and api versions are out of step — rebuild with `docker compose up --build`.',
+      versionSkewRemedy(),
     )
   }
   return parsed.data
@@ -343,7 +344,7 @@ export async function deleteConstraint(constraintId: string): Promise<void> {
       headers: await authHeader(),
     })
   } catch {
-    throw new ApiError('Cannot reach the API.', 'Start the stack with `docker compose up`.')
+    throw new ApiError('Cannot reach the API.', unreachableRemedy('retry'))
   }
   if (!response.ok) {
     throw new ApiError(
@@ -407,7 +408,7 @@ export async function removeDesignMember(
       headers: await authHeader(),
     })
   } catch {
-    throw new ApiError('Cannot reach the API.', 'Start the stack with `docker compose up`.')
+    throw new ApiError('Cannot reach the API.', unreachableRemedy('retry'))
   }
   if (!response.ok) {
     throw new ApiError(

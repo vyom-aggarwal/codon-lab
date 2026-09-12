@@ -19,6 +19,7 @@ import { Resizer } from '@/components/workbench/resizer'
 import { VariantTable, type VariantRow } from '@/components/workbench/variant-table'
 import * as api from '@/lib/api'
 import { applyFilters, regionCounts } from '@/lib/workbench-filter'
+import { serverErrorRemedy } from '@/lib/remedies'
 import {
   INSPECTOR_MAX,
   INSPECTOR_MIN,
@@ -211,7 +212,7 @@ export function Workbench({
       {query.isError ? (
         <InlineError
           message="The ranking could not be loaded."
-          remedy="Reload the page. If it persists, check `docker compose logs api`."
+          remedy={serverErrorRemedy()}
         />
       ) : null}
 

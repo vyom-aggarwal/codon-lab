@@ -319,7 +319,7 @@ that genuinely crosses Postgres is asserted over HTTP in `verify_gates.py`, beca
 the boundary a future caller actually crosses.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test          # 221 vitest, 13 files
+pnpm typecheck && pnpm lint && pnpm test          # 230 vitest, 14 files
 python scripts/verify_gates.py                    # 263 checks, live stack
 pnpm --filter @codonlab/web e2e                   # 6 Playwright flows, needs the stack
 docker compose exec -T api sh -c "cd /app && python -m pytest -q"

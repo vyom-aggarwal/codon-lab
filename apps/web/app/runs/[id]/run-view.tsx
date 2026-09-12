@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
+import { noWorkerRemedy, serverErrorRemedy } from '@/lib/remedies'
 
 /** How many ranked rows the run view previews. The workbench is Phase 5. */
 const PREVIEW_ROWS = 10
@@ -158,8 +159,7 @@ export function RunView({
               : `The job queue is unreachable${queue.detail ? `: ${queue.detail}` : '.'}`}
           </p>
           <p className="text-12 text-text-muted mt-1">
-            Start it with <span className="font-mono">docker compose up -d worker</span>. The run
-            will pick up where it is.
+            {noWorkerRemedy()} The run will pick up where it is.
           </p>
         </div>
       ) : null}
@@ -206,7 +206,7 @@ export function RunView({
           ) : (
             <InlineError
               message="The ranking could not be loaded."
-              remedy="Reload the page. If it persists, check `docker compose logs api`."
+              remedy={serverErrorRemedy()}
             />
           )}
 
