@@ -95,6 +95,53 @@ the browser cannot call the API at all.
 
 ---
 
+## 2.4 Running it for free, on one box
+
+The split above — API, worker, Postgres and Redis as four managed services — is
+the shape that costs money, and the reason is the **worker**. Platform free
+tiers either do not offer background workers at all (Render) or sleep them,
+which kills a run mid-flight. `render.yaml` therefore asks for two paid Starter
+instances.
+
+**If the cost is the problem, stop paying per service and run the whole
+`docker-compose.yml` on one machine.** That is the configuration this project
+actually develops against, and as of 2026-09-15 it is verified from a cold
+clone: a fresh `git clone` with no `.env`, five images built from nothing, seven
+migrations against an empty database, the seed landing 2,172 measured values,
+and every screen serving. `HANDOFF.md` §9.18 records exactly what was run.
+
+```bash
+git clone https://github.com/vyom-aggarwal/codon-lab.git
+cd codon-lab && docker compose up -d
+```
+
+No `.env` is required — every variable in the compose file has a default.
+
+**Where to put that box.** Two options with honestly different confidence:
+
+- **Your own machine, exposed with a Cloudflare Tunnel.** Free, needs no new
+  hosting account, and works today. It is reachable only while your machine is
+  on, which makes it right for showing somebody on a call and wrong for "here
+  is a link, look whenever".
+- **A free-tier cloud VM.** Oracle Cloud's Always Free ARM instances are the
+  usual candidate and are generously specified for this. All five images
+  (`python:3.12-slim`, `node:22-slim`, `postgres:17-alpine`, `redis:7-alpine`)
+  are official multi-arch builds, so ARM is fine — that was checked, not
+  assumed. **What was not checked is Oracle's current terms, their ARM capacity,
+  or whether the card they ask for stays uncharged.** Read their pricing page
+  rather than this paragraph.
+
+Free tiers move. Fly.io, Railway and Koyeb have all changed theirs repeatedly
+and none of them is recommended here, not because they are bad but because no
+claim about them could be verified at the time of writing.
+
+**What a single box does not give you.** No managed backups, no failover, and
+one machine's worth of CPU for hour-long scoring jobs. That is the correct
+trade for a demo or a lab's internal instance, and the wrong one for anything
+a team depends on.
+
+---
+
 ## 3. Authentication
 
 ### 3.1 What it is, and what it is not

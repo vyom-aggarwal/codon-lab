@@ -1214,11 +1214,27 @@ is checked; what is left at the top is the one judgement no gate can make.
     parser and is badged as such. Do not describe it as working until it has
     been called.
 
-18. **A cold clone has never been tested.** `docker compose up` has only ever
-    run on a machine that already had images and a populated database. Phase 8
-    adds a new reason to care: the seed now creates a target, 4,028 variants and
-    2,172 measurements on first boot, and that path has only been exercised
-    against an already-migrated database.
+18. **~~A cold clone has never been tested.~~ Closed 2026-09-15.** Run for
+    real: `git clone` from GitHub at `be3b859` into an empty directory with no
+    `.env`, then `docker compose -p codonlab-cold up -d --build` so it got its
+    own volumes rather than attaching to the existing ones. `name: codon-lab`
+    is fixed in the compose file, so without `-p` a second checkout silently
+    reuses the first one's containers and volumes and tests nothing — that is
+    the trap to remember if this is ever re-run.
+
+    All five images built from nothing, all seven migrations ran against an
+    empty database, and the seed inserted its projects and 2,172 measured
+    values on first boot. `/health`, `/meta`, `/projects` and the web app's
+    `/`, `/projects` and `/scorecard` all served. **No `.env` is needed** —
+    every `${VAR}` in the compose file has a default, which is what makes
+    `git clone && docker compose up` a real instruction rather than an
+    aspiration.
+
+    One real defect found: the boot line read `seed: inserted 2 project(s)` on
+    a cold start that created **three**. `_seed_validation_loop` creates the
+    measured project itself and returns a measurement count, so `seed()` never
+    counted it. Fixed. It is one log line, and it is also the only message an
+    operator sees on first boot.
 
 19. **One dark-theme colour pair fails AA, latently.** `--accent` on
     `--accent-sunk` is **4.23:1** against the 4.5:1 floor.

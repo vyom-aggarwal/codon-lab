@@ -311,6 +311,13 @@ def seed() -> tuple[int, int]:
             session.add(Project(**row))
             inserted += 1
         measurements = _seed_validation_loop(session)
+        # `_seed_validation_loop` creates its own project — the measured one the
+        # scorecard needs — and returns a measurement count, not a project
+        # count. Counting it here keeps the boot line honest: it read
+        # "inserted 2 project(s)" on a cold start that created three, which is
+        # a small lie in the one message an operator sees on first boot.
+        if measurements:
+            inserted += 1
         session.commit()
     return inserted, measurements
 
